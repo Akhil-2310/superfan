@@ -1,0 +1,10 @@
+{
+  "network": "chilizTestnet",
+  "deployer": "0x8b916003D0C8F1f468a720BA4Ab5EA9678bc6e61",
+  "timestamp": "2025-11-23T06:18:47.737Z",
+  "contracts": {
+    "token": "0xCee0c15B42EEb44491F588104bbC46812115dBB0",
+    "achievements": "0x99466103FaC328a7596DEAF4b728e24E69d252bc",
+    "reputation": "0xca45Eb8CF0fB1Ad779148E3fe15820AD0beD375b"
+  }
+}
