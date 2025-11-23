@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAccount } from "wagmi"
+import { useAccount, useReadContract } from "wagmi"
 import {
   Bell,
   Home,
@@ -29,6 +29,19 @@ import { getCountryFlag } from "@/lib/api/self-data-parser"
 import { checkIfLastUser } from "@/lib/api/simple-self-reader"
 import { fetchUpcomingMatches, type UpcomingMatch } from "@/lib/api/fetch-matches"
 
+// Contract addresses and ABIs for on-chain balance
+const FANFI_TOKEN_ADDRESS = "0xCee0c15B42EEb44491F588104bbC46812115dBB0" as `0x${string}`
+
+const ERC20_ABI = [
+  {
+    "inputs": [{ "internalType": "address", "name": "account", "type": "address" }],
+    "name": "balanceOf",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const
+
 export default function DashboardPage() {
   const { address } = useAccount()
   const [reputation, setReputation] = useState<any>(null)
@@ -37,6 +50,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([])
   const [matchesLoading, setMatchesLoading] = useState(true)
+
+  // ===== READ REAL FANFI BALANCE FROM BLOCKCHAIN =====
+  const { data: fanfiBalance } = useReadContract({
+    address: FANFI_TOKEN_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+  })
+
+  // Parse balance to readable format
+  const totalTokens = fanfiBalance ? parseFloat(formatEther(fanfiBalance)) : 0
 
   useEffect(() => {
     if (address) {
@@ -107,42 +131,8 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-white text-[#121212]">
-      {/* Top Navigation */}
-      <nav className="bg-white border-b border-[#E4E4E4] px-4 py-4 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-[#CE1141] rounded-xl flex items-center justify-center">
-                <Flame className="w-6 h-6 text-white" strokeWidth={2.5} />
-              </div>
-              <span className="font-bold text-xl text-[#121212] hidden md:block">FanFi</span>
-            </Link>
-            <div className="hidden md:flex items-center gap-6">
-              <Link href="/dashboard" className="text-[#CE1141] font-semibold flex items-center gap-2">
-                <Home className="w-5 h-5" strokeWidth={2} />
-                Dashboard
-              </Link>
-              <Link href="/engage" className="text-[#6E6E6E] hover:text-[#121212] flex items-center gap-2 transition-colors">
-                <Zap className="w-5 h-5" strokeWidth={2} />
-                Engage
-              </Link>
-              <Link href="/duels" className="text-[#6E6E6E] hover:text-[#121212] flex items-center gap-2 transition-colors">
-                <Swords className="w-5 h-5" strokeWidth={2} />
-                Duels
-              </Link>
-            </div>
-          </div>
-          <Link href="/profile">
-            <button className="flex items-center gap-2 bg-[#F8F8F8] hover:bg-[#F0F0F0] border border-[#E4E4E4] rounded-xl px-4 py-2 transition-colors">
-              <User className="w-5 h-5 text-[#6E6E6E]" strokeWidth={2} />
-              <span className="hidden md:inline text-sm font-medium">Profile</span>
-            </button>
-          </Link>
-        </div>
-      </nav>
-
       {/* Main Content */}
-      <main className="flex-1 px-4 py-6 pb-24">
+      <main className="flex-1 px-4 py-6">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Sidebar - Quick Stats */}
           <aside className="lg:col-span-3 space-y-4">
@@ -161,8 +151,8 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/20">
                     <div>
-                      <p className="text-white/70 text-xs">Tokens</p>
-                      <p className="font-bold text-lg">{userData.total_tokens || 0}</p>
+                      <p className="text-white/70 text-xs">FANFI Tokens</p>
+                      <p className="font-bold text-lg">{totalTokens.toFixed(2)}</p>
                     </div>
                     <div>
                       <p className="text-white/70 text-xs">Rep Score</p>
@@ -223,9 +213,9 @@ export default function DashboardPage() {
               </div>
             ) : upcomingMatches.length > 0 ? (
               <div className="space-y-4">
-                {upcomingMatches.map((match) => (
+                {upcomingMatches.map((match, index) => (
                 <article
-                  key={match.id}
+                  key={`${match.id}-${index}`}
                   className={`bg-[#F8F8F8] border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all ${
                     match.isLive ? 'border-red-500 bg-red-50/50' : 'border-[#E4E4E4]'
                   }`}
@@ -279,16 +269,18 @@ export default function DashboardPage() {
 
                   {/* Action Button */}
                   <div className="mt-4 pt-4 border-t border-[#E4E4E4]">
-                    {match.isLive ? (
-                      <button className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
-                        <PlayCircle className="w-5 h-5" strokeWidth={2} />
-                        Watch Live
-                      </button>
-                    ) : (
-                      <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white font-semibold py-3 rounded-xl transition-colors">
-                        Join Watch Room
-                      </button>
-                    )}
+                    <Link href={`/watch-room/${match.id}`}>
+                      {match.isLive ? (
+                        <button className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                          <PlayCircle className="w-5 h-5" strokeWidth={2} />
+                          Watch Live
+                        </button>
+                      ) : (
+                        <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white font-semibold py-3 rounded-xl transition-colors">
+                          Join Watch Room
+                        </button>
+                      )}
+                    </Link>
                   </div>
                 </article>
                 ))}

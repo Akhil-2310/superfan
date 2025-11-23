@@ -239,9 +239,9 @@ export default function DashboardPage() {
 
             {/* Matches Grid */}
             <div className="space-y-4">
-              {upcomingMatches.map((match) => (
+              {upcomingMatches.map((match, index) => (
                 <article
-                  key={match.id}
+                  key={`${match.id}-${index}`}
                   className={`bg-[#F8F8F8] border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all ${
                     match.isLive ? 'border-red-500 bg-red-50/50' : 'border-[#E4E4E4]'
                   }`}
