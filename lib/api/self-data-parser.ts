@@ -188,8 +188,41 @@ export function mapNationalityCodeToName(code: number): string {
 }
 
 /**
+ * Convert ISO 3166-1 alpha-3 country code to full country name
+ */
+export function alpha3ToCountryName(alpha3Code: string): string {
+  const alpha3Map: Record<string, string> = {
+    'ARG': 'Argentina',
+    'BRA': 'Brazil',
+    'CHL': 'Chile',
+    'COL': 'Colombia',
+    'FRA': 'France',
+    'DEU': 'Germany',
+    'ITA': 'Italy',
+    'MEX': 'Mexico',
+    'PRT': 'Portugal',
+    'ESP': 'Spain',
+    'GBR': 'United Kingdom',
+    'USA': 'United States',
+    'CAN': 'Canada',
+    'CHN': 'China',
+    'IND': 'India',
+    'JPN': 'Japan',
+    'KOR': 'South Korea',
+    'AUS': 'Australia',
+    'NZL': 'New Zealand',
+    'ZAF': 'South Africa',
+    'NGA': 'Nigeria',
+    'EGY': 'Egypt',
+    'KEN': 'Kenya',
+  }
+  
+  return alpha3Map[alpha3Code.toUpperCase()] || alpha3Code
+}
+
+/**
  * Map country code to emoji flag
- * Also handles country names (case insensitive)
+ * Also handles country names (case insensitive) and ISO 3166-1 alpha-3 codes
  */
 export function getCountryFlag(codeOrName: number | string): string {
   // Handle country code (number)
@@ -209,6 +242,38 @@ export function getCountryFlag(codeOrName: number | string): string {
       840: '🇺🇸',  // United States
     }
     return flagMap[codeOrName] || '🌍'
+  }
+  
+  // Handle ISO 3166-1 alpha-3 code (e.g., "ARG", "BRA")
+  const upper = codeOrName.toUpperCase()
+  const alpha3ToFlag: Record<string, string> = {
+    'ARG': '🇦🇷',
+    'BRA': '🇧🇷',
+    'CHL': '🇨🇱',
+    'COL': '🇨🇴',
+    'FRA': '🇫🇷',
+    'DEU': '🇩🇪',
+    'ITA': '🇮🇹',
+    'MEX': '🇲🇽',
+    'PRT': '🇵🇹',
+    'ESP': '🇪🇸',
+    'GBR': '🇬🇧',
+    'USA': '🇺🇸',
+    'CAN': '🇨🇦',
+    'CHN': '🇨🇳',
+    'IND': '🇮🇳',
+    'JPN': '🇯🇵',
+    'KOR': '🇰🇷',
+    'AUS': '🇦🇺',
+    'NZL': '🇳🇿',
+    'ZAF': '🇿🇦',
+    'NGA': '🇳🇬',
+    'EGY': '🇪🇬',
+    'KEN': '🇰🇪',
+  }
+  
+  if (alpha3ToFlag[upper]) {
+    return alpha3ToFlag[upper]
   }
   
   // Handle country name (string)

@@ -283,12 +283,20 @@ export async function fetchUpcomingMatches(): Promise<UpcomingMatch[]> {
       fetchLeagueMatches(LEAGUES.bundesliga, 'German Bundesliga'),
     ])
     
-    // Combine and take first 6 matches
-    const allMatches = [
+    // Combine all matches
+    const combinedMatches = [
       ...premierLeagueMatches,
       ...laLigaMatches,
       ...bundesligaMatches,
-    ].slice(0, 6)
+    ]
+    
+    // Remove duplicates based on match ID
+    const uniqueMatches = combinedMatches.filter((match, index, self) =>
+      index === self.findIndex((m) => m.id === match.id)
+    )
+    
+    // Take first 6 unique matches
+    const allMatches = uniqueMatches.slice(0, 6)
     
     // If we got less than 3 matches, add fallback demo matches
     if (allMatches.length < 3) {
