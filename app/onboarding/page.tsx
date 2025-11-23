@@ -13,7 +13,7 @@ import {
 } from "@selfxyz/qrcode"
 import { ethers } from "ethers"
 import { supabase } from "@/lib/supabase/client"
-import { parseSelfVerification, formatName, getCountryFlag, mapNationalityCodeToName } from "@/lib/api/self-data-parser"
+import { parseSelfVerification, formatName, getCountryFlag, mapNationalityCodeToName, alpha3ToCountryName } from "@/lib/api/self-data-parser"
 import { checkIfLastUser } from "@/lib/api/simple-self-reader"
 
 type OnboardingStep = 'connect' | 'verify' | 'scanning' | 'complete'
@@ -21,7 +21,7 @@ type OnboardingStep = 'connect' | 'verify' | 'scanning' | 'complete'
 interface VerificationData {
   name: string
   nationality: string
-  nationalityCode: number
+  nationalityCode: string | number
   age: number
   nullifier: string
 }
@@ -99,25 +99,31 @@ export default function OnboardingPage() {
         console.log('✅ Found your name in contract:', lastUserCheck.name)
         
         // Use contract data
+        const nationalityCode = lastUserCheck.nationality || 'unknown'
+        const nationalityName = alpha3ToCountryName(nationalityCode)
+        const age = lastUserCheck.minimumAge || 18
+        
         const verificationData: VerificationData = {
           name: lastUserCheck.name,
-          nationality: 'Unknown', // We'll get this from somewhere else or default
-          nationalityCode: 0,
-          age: 18,
+          nationality: nationalityName,
+          nationalityCode: nationalityCode,
+          age: age,
           nullifier: '',
         }
         
+        console.log('✅ Verification data:', verificationData)
+        
         setVerificationData(verificationData)
         
-        // Save to database with contract name
+        // Save to database with contract name and nationality
         await supabase
           .from('users')
           .upsert({
             wallet_address: address,
-            nationality: 'unknown',
+            nationality: nationalityCode.toLowerCase(),
             self_verified: true,
             verified_name: lastUserCheck.name,
-            verified_age: 18,
+            verified_age: age,
             fan_score: 0,
             total_tokens: 0,
             streak_days: 0,
@@ -319,31 +325,7 @@ export default function OnboardingPage() {
               />
             </div>
 
-            <div className="space-y-3">
-              <div className="bg-[#FFF8F0] border border-[#F7D020] rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-[#121212] flex-shrink-0 mt-0.5" strokeWidth={2} />
-                  <div>
-                    <p className="text-[#121212] font-semibold text-sm mb-1">Privacy First</p>
-                    <p className="text-[#6E6E6E] text-xs">
-                      Self.xyz uses zero-knowledge proofs. Your personal data never leaves your device. Only nationality and age (18+) are verified.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center">
-                <p className="text-[#6E6E6E] text-sm mb-2">Don't have the Self app?</p>
-                <a 
-                  href="https://self.xyz/app" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-[#CE1141] font-semibold text-sm hover:underline"
-                >
-                  Download Self App →
-                </a>
-              </div>
-            </div>
+         
 
             {/* Mobile Deeplink Option */}
             {universalLink && (

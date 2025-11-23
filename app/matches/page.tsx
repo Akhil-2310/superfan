@@ -126,9 +126,9 @@ export default function MatchesPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {matches.map((match) => (
+              {matches.map((match, index) => (
                 <Link
-                  key={match.id}
+                  key={`${match.id}-${index}`}
                   href={`/watch-room/${match.matchId}`}
                   className="block bg-[#F8F8F8] border border-[#E4E4E4] rounded-2xl p-6 hover:shadow-md transition-all"
                 >
