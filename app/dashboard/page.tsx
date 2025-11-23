@@ -1,5 +1,7 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useAccount } from "wagmi"
 import {
   Bell,
   Home,
@@ -12,283 +14,296 @@ import {
   MessageSquare,
   ShoppingBag,
   MapPin,
+  Swords,
+  Activity,
+  Shield,
+  Calendar,
+  Clock,
+  PlayCircle,
 } from "lucide-react"
 import Link from "next/link"
-import Image from "next/image"
-
-const activityItems = [
-  {
-    id: 1,
-    icon: Ticket,
-    title: "Match Ticket Redeemed",
-    time: "2 hours ago",
-    points: 500,
-  },
-  {
-    id: 2,
-    icon: MessageSquare,
-    title: "Social Post Verified",
-    time: "1 day ago",
-    points: 100,
-  },
-  {
-    id: 3,
-    icon: ShoppingBag,
-    title: "Merch Purchase Verified",
-    time: "2 days ago",
-    points: 300,
-  },
-  {
-    id: 4,
-    icon: MapPin,
-    title: "Stadium Check-in",
-    time: "5 days ago",
-    points: 1000,
-  },
-]
-
-const leaderboardUsers = [
-  { rank: 1, name: "Alex Johnson", points: 8450 },
-  { rank: 2, name: "Sarah Martinez", points: 7890 },
-  { rank: 3, name: "Mike Chen", points: 7234 },
-  { rank: 4, name: "Emma Wilson", points: 6890 },
-  { rank: 5, name: "Mira Bianchi", points: 6450, isCurrentUser: true },
-]
+import { calculateReputationFromTransactions, getReputationTier } from "@/lib/api/chiliz-reputation"
+import { formatEther } from "viem"
+import { supabase } from "@/lib/supabase/client"
+import { getCountryFlag } from "@/lib/api/self-data-parser"
+import { checkIfLastUser } from "@/lib/api/simple-self-reader"
+import { fetchUpcomingMatches, type UpcomingMatch } from "@/lib/api/fetch-matches"
 
 export default function DashboardPage() {
+  const { address } = useAccount()
+  const [reputation, setReputation] = useState<any>(null)
+  const [userData, setUserData] = useState<any>(null)
+  const [contractName, setContractName] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [upcomingMatches, setUpcomingMatches] = useState<UpcomingMatch[]>([])
+  const [matchesLoading, setMatchesLoading] = useState(true)
+
+  useEffect(() => {
+    if (address) {
+      loadUserData()
+      loadReputation()
+      loadContractName()
+    }
+    loadMatches()
+  }, [address])
+
+  const loadUserData = async () => {
+    if (!address) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('wallet_address', address)
+        .single()
+      
+      if (!error && data) {
+        setUserData(data)
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error)
+    }
+  }
+
+  const loadReputation = async () => {
+    if (!address) return
+    
+    try {
+      const rep = await calculateReputationFromTransactions(address, true)
+      setReputation(rep)
+    } catch (error) {
+      console.error('Error loading reputation:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadContractName = async () => {
+    if (!address) return
+    
+    try {
+      const result = await checkIfLastUser(address)
+      if (result.isLastUser && result.name) {
+        setContractName(result.name)
+      }
+    } catch (error) {
+      console.error('Error loading contract name:', error)
+    }
+  }
+
+  const loadMatches = async () => {
+    setMatchesLoading(true)
+    try {
+      const matches = await fetchUpcomingMatches()
+      setUpcomingMatches(matches.slice(0, 3)) // Take only 3 matches for dashboard
+    } catch (error) {
+      console.error('Error loading matches:', error)
+    } finally {
+      setMatchesLoading(false)
+    }
+  }
+
+  const tier = reputation ? getReputationTier(reputation.reputationScore) : null
+
   return (
-    <div className="min-h-screen bg-white flex flex-col">
-      {/* Top Notification Banner */}
-      <Link href="/reward">
-        <aside className="bg-[#FFF8F0] border border-[#E4E4E4] rounded-2xl mx-4 mt-4 p-4 flex items-center justify-between cursor-pointer hover:bg-[#FFF0E0] transition-colors shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#F7D020] rounded-full flex items-center justify-center flex-shrink-0">
-              <Trophy className="w-6 h-6 text-[#121212]" strokeWidth={2.5} />
-            </div>
-            <div>
-              <p className="text-[#121212] font-semibold text-sm md:text-base">Congratulations, you earned a reward!</p>
-              <p className="text-[#6E6E6E] text-xs md:text-sm">Tap to view your NFT</p>
+    <div className="min-h-screen bg-white text-[#121212]">
+      {/* Top Navigation */}
+      <nav className="bg-white border-b border-[#E4E4E4] px-4 py-4 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Link href="/dashboard" className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-[#CE1141] rounded-xl flex items-center justify-center">
+                <Flame className="w-6 h-6 text-white" strokeWidth={2.5} />
+              </div>
+              <span className="font-bold text-xl text-[#121212] hidden md:block">FanFi</span>
+            </Link>
+            <div className="hidden md:flex items-center gap-6">
+              <Link href="/dashboard" className="text-[#CE1141] font-semibold flex items-center gap-2">
+                <Home className="w-5 h-5" strokeWidth={2} />
+                Dashboard
+              </Link>
+              <Link href="/engage" className="text-[#6E6E6E] hover:text-[#121212] flex items-center gap-2 transition-colors">
+                <Zap className="w-5 h-5" strokeWidth={2} />
+                Engage
+              </Link>
+              <Link href="/duels" className="text-[#6E6E6E] hover:text-[#121212] flex items-center gap-2 transition-colors">
+                <Swords className="w-5 h-5" strokeWidth={2} />
+                Duels
+              </Link>
             </div>
           </div>
-          <button className="text-[#CE1141] hover:text-[#A00F35] transition-colors" aria-label="View notifications">
-            <Bell className="w-5 h-5 md:w-6 md:h-6" strokeWidth={2} />
-          </button>
-        </aside>
-      </Link>
+          <Link href="/profile">
+            <button className="flex items-center gap-2 bg-[#F8F8F8] hover:bg-[#F0F0F0] border border-[#E4E4E4] rounded-xl px-4 py-2 transition-colors">
+              <User className="w-5 h-5 text-[#6E6E6E]" strokeWidth={2} />
+              <span className="hidden md:inline text-sm font-medium">Profile</span>
+            </button>
+          </Link>
+        </div>
+      </nav>
 
       {/* Main Content */}
       <main className="flex-1 px-4 py-6 pb-24">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Sidebar */}
-          <aside className="lg:col-span-3 space-y-6">
-            {/* Fan Tokens Card */}
-            <section className="bg-gradient-to-br from-[#0033A0] via-[#002D8F] to-[#F7D020] rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
-              <div className="flex items-center gap-2 mb-4">
-                <Trophy className="w-5 h-5" strokeWidth={2} />
-                <h2 className="text-sm font-medium">Fan Tokens</h2>
-              </div>
-              <p className="text-5xl font-bold mb-3">24,567</p>
-              <div className="flex items-center gap-1 text-green-300 text-sm">
-                <TrendingUp className="w-4 h-4" strokeWidth={2} />
-                <span className="font-medium">+1,250 this week</span>
-              </div>
-
-              {/* Argentina Token Image */}
-              <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 opacity-20">
-                <Image
-                  src="/images/argentina-token.svg"
-                  alt="Argentina Fan Token"
-                  width={128}
-                  height={128}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            </section>
-
-            {/* Check in at Stadium Button */}
-            <Link href="/check-in" className="block w-full">
-              <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white font-semibold py-4 rounded-2xl transition-colors flex items-center justify-center gap-2 shadow-sm">
-                <MapPin className="w-5 h-5" strokeWidth={2} />
-                Check in at Stadium
-              </button>
-            </Link>
-
-            {/* User Profile Card */}
-            <section className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-4 mb-6 pb-6 border-b border-[#E4E4E4]">
-                <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0 border-2 border-[#F7D020]">
-                  <Image
-                    src="/images/mira-bianchi.webp"
-                    alt="Mira Bianchi"
-                    width={64}
-                    height={64}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-[#121212] font-semibold">Mira Bianchi</h3>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full text-green-700 text-xs font-medium">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                      Verified
-                    </span>
+          {/* Left Sidebar - Quick Stats */}
+          <aside className="lg:col-span-3 space-y-4">
+            {/* Quick Profile Card */}
+            {userData && (
+              <Link href="/profile">
+                <section className="bg-gradient-to-br from-[#CE1141] to-[#B01038] rounded-xl p-5 text-white shadow-md hover:shadow-lg transition-shadow cursor-pointer">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
+                      <span className="text-2xl">{getCountryFlag(userData?.nationality || 'unknown')}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{contractName || userData.verified_name || 'User'}</p>
+                      <p className="text-white/80 text-xs">View Profile →</p>
+                    </div>
                   </div>
-                  <p className="text-[#6E6E6E] text-sm">Argentina</p>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6E6E6E]">FanScore</span>
-                  <span className="text-[#121212] font-semibold text-lg">6,450</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6E6E6E]">Rank</span>
-                  <span className="text-[#121212] font-semibold text-lg">#5</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6E6E6E]">Streak</span>
-                  <div className="flex items-center gap-1.5">
-                    <Flame className="w-4 h-4 text-orange-500" strokeWidth={2} />
-                    <span className="text-[#121212] font-semibold text-lg">12 days</span>
+                  <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/20">
+                    <div>
+                      <p className="text-white/70 text-xs">Tokens</p>
+                      <p className="font-bold text-lg">{userData.total_tokens || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/70 text-xs">Rep Score</p>
+                      <p className="font-bold text-lg">{reputation?.reputationScore || 0}</p>
+                    </div>
                   </div>
-                </div>
-              </div>
-            </section>
+                </section>
+              </Link>
+            )}
 
-            {/* Staking Rewards Card */}
-            <section className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-[#121212] font-semibold">Staking Rewards</h2>
-                <span className="px-3 py-1 bg-[#CE1141] text-white text-xs font-medium rounded-full">Chiliz Earn</span>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6E6E6E] text-sm">Staked</span>
-                  <span className="text-[#A0A0A0] text-sm">—</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#6E6E6E] text-sm">Annual Yield</span>
-                  <span className="text-[#A0A0A0] text-sm">0.00%</span>
-                </div>
+            {/* Quick Actions */}
+            <section className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-xl p-5 shadow-sm">
+              <h3 className="text-[#121212] font-semibold mb-4 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-[#CE1141]" strokeWidth={2} />
+                Quick Actions
+              </h3>
+              <div className="space-y-2">
+                <Link href="/engage">
+                  <button className="w-full bg-white hover:bg-gray-50 border border-[#E4E4E4] rounded-lg p-3 flex items-center gap-3 text-left transition-colors">
+                    <Zap className="w-5 h-5 text-[#CE1141]" strokeWidth={2} />
+                    <span className="text-sm font-medium">Engage & Earn</span>
+                  </button>
+                </Link>
+                <Link href="/duels">
+                  <button className="w-full bg-white hover:bg-gray-50 border border-[#E4E4E4] rounded-lg p-3 flex items-center gap-3 text-left transition-colors">
+                    <Swords className="w-5 h-5 text-[#3B99FC]" strokeWidth={2} />
+                    <span className="text-sm font-medium">Duels</span>
+                  </button>
+                </Link>
+                <Link href="/staking">
+                  <button className="w-full bg-white hover:bg-gray-50 border border-[#E4E4E4] rounded-lg p-3 flex items-center gap-3 text-left transition-colors">
+                    <Trophy className="w-5 h-5 text-[#16A34A]" strokeWidth={2} />
+                    <span className="text-sm font-medium">Stake Tokens</span>
+                  </button>
+                </Link>
               </div>
             </section>
           </aside>
 
-          {/* Center Activity Timeline */}
-          <section className="lg:col-span-6 space-y-4">
-            <header className="mb-6">
-              <h2 className="text-[#121212] text-2xl font-bold mb-2">Activity Timeline</h2>
-              <p className="text-[#6E6E6E]">Your verified fan actions</p>
+          {/* Center - Upcoming Matches */}
+          <section className="lg:col-span-9 space-y-6">
+            <header className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[#121212] text-2xl font-bold mb-1">Matches</h2>
+                <p className="text-[#6E6E6E]">Live and upcoming games</p>
+              </div>
+              <Link href="/matches">
+                <button className="text-[#CE1141] hover:underline text-sm font-semibold">
+                  View All →
+                </button>
+              </Link>
             </header>
 
-            <div className="space-y-4">
-              {activityItems.map((item) => (
+            {/* Matches Grid */}
+            {matchesLoading ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-12 h-12 border-4 border-[#E4E4E4] border-t-[#CE1141] rounded-full animate-spin"></div>
+              </div>
+            ) : upcomingMatches.length > 0 ? (
+              <div className="space-y-4">
+                {upcomingMatches.map((match) => (
                 <article
-                  key={item.id}
-                  className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-2xl p-6 flex items-start gap-4 shadow-sm hover:shadow-md transition-shadow"
+                  key={match.id}
+                  className={`bg-[#F8F8F8] border rounded-2xl p-6 shadow-sm hover:shadow-md transition-all ${
+                    match.isLive ? 'border-red-500 bg-red-50/50' : 'border-[#E4E4E4]'
+                  }`}
                 >
-                  <div className="w-12 h-12 bg-white border border-[#E4E4E4] rounded-xl flex items-center justify-center flex-shrink-0">
-                    <item.icon className="w-6 h-6 text-[#6E6E6E]" strokeWidth={2} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-[#121212] font-semibold text-lg mb-1">{item.title}</h3>
-                    <p className="text-[#6E6E6E] text-sm mb-2">{item.time}</p>
-                    <p className="text-[#CE1141] text-sm font-medium">
-                      <Trophy className="w-4 h-4 inline mr-1" strokeWidth={2} />+{item.points} points
-                    </p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-full text-green-700 text-xs font-medium flex-shrink-0">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                    Verified
-                  </span>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          {/* Right Leaderboard */}
-          <aside className="lg:col-span-3 space-y-4">
-            <header className="mb-6">
-              <h2 className="text-[#121212] text-2xl font-bold mb-2">Leaderboard</h2>
-              <p className="text-[#6E6E6E]">Top fans this week</p>
-            </header>
-
-            <div className="space-y-3">
-              {leaderboardUsers.map((user) => (
-                <div
-                  key={user.rank}
-                  className={`rounded-2xl p-4 flex items-center gap-3 ${
-                    user.isCurrentUser
-                      ? "bg-[#0033A0]/10 border-2 border-[#0033A0]"
-                      : "bg-[#F8F8F8] border border-[#E4E4E4]"
-                  } shadow-sm`}
-                >
-                  <span className="text-[#6E6E6E] font-semibold text-sm w-8">#{user.rank}</span>
-                  <div className="w-10 h-10 bg-white border border-[#E4E4E4] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    {user.isCurrentUser ? (
-                      <Image
-                        src="/images/mira-bianchi.webp"
-                        alt="Mira Bianchi"
-                        width={40}
-                        height={40}
-                        className="w-full h-full object-cover"
-                      />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-[#6E6E6E]" strokeWidth={2} />
+                      <span className="text-[#6E6E6E] text-sm">{match.competition}</span>
+                    </div>
+                    {match.isLive ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-500 rounded-full text-white text-xs font-bold animate-pulse">
+                        <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
+                        LIVE
+                      </span>
                     ) : (
-                      <User className="w-5 h-5 text-[#6E6E6E]" strokeWidth={2} />
+                      <span className="text-[#6E6E6E] text-sm flex items-center gap-1">
+                        <Clock className="w-4 h-4" strokeWidth={2} />
+                        {match.date} • {match.time}
+                      </span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[#121212] font-medium truncate">{user.name}</p>
-                    <p className="text-[#6E6E6E] text-xs">{user.points.toLocaleString()} pts</p>
-                  </div>
-                  {user.rank <= 3 && (
-                    <Trophy className="w-5 h-5 text-[#F7D020] flex-shrink-0" strokeWidth={2} fill="#F7D020" />
-                  )}
-                </div>
-              ))}
-            </div>
 
-            <Link href="/leaderboard" className="block w-full">
-              <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white text-sm font-semibold py-3 rounded-xl transition-colors shadow-sm">
-                View Full Leaderboard
-              </button>
-            </Link>
-          </aside>
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Home Team */}
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-16 h-16 bg-white border border-[#E4E4E4] rounded-xl flex items-center justify-center">
+                        <span className="text-3xl">{match.homeFlag}</span>
+                      </div>
+                      <div>
+                        <p className="text-[#121212] font-bold text-lg">{match.homeTeam}</p>
+                        <p className="text-[#6E6E6E] text-sm">Home</p>
+                      </div>
+                    </div>
+
+                    {/* VS */}
+                    <div className="px-4">
+                      <p className="text-[#6E6E6E] font-bold text-lg">VS</p>
+                    </div>
+
+                    {/* Away Team */}
+                    <div className="flex items-center gap-3 flex-1 justify-end">
+                      <div className="text-right">
+                        <p className="text-[#121212] font-bold text-lg">{match.awayTeam}</p>
+                        <p className="text-[#6E6E6E] text-sm">Away</p>
+                      </div>
+                      <div className="w-16 h-16 bg-white border border-[#E4E4E4] rounded-xl flex items-center justify-center">
+                        <span className="text-3xl">{match.awayFlag}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <div className="mt-4 pt-4 border-t border-[#E4E4E4]">
+                    {match.isLive ? (
+                      <button className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2">
+                        <PlayCircle className="w-5 h-5" strokeWidth={2} />
+                        Watch Live
+                      </button>
+                    ) : (
+                      <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white font-semibold py-3 rounded-xl transition-colors">
+                        Join Watch Room
+                      </button>
+                    )}
+                  </div>
+                </article>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-2xl p-12 text-center">
+                <Calendar className="w-16 h-16 text-[#6E6E6E] mx-auto mb-4" strokeWidth={1.5} />
+                <h3 className="text-[#121212] text-xl font-bold mb-2">No Upcoming Matches</h3>
+                <p className="text-[#6E6E6E]">Check back later for new games!</p>
+              </div>
+            )}
+          </section>
         </div>
       </main>
-
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E4E4E4] shadow-lg">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-around">
-          <button className="flex flex-col items-center gap-1 text-[#CE1141] group" aria-current="page">
-            <Home className="w-6 h-6" strokeWidth={2} />
-            <span className="text-xs font-medium">Home</span>
-          </button>
-          <Link
-            href="/engage"
-            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
-          >
-            <Zap className="w-6 h-6" strokeWidth={2} />
-            <span className="text-xs font-medium">Engage</span>
-          </Link>
-          <Link
-            href="/leaderboard"
-            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
-          >
-            <Trophy className="w-6 h-6" strokeWidth={2} />
-            <span className="text-xs font-medium">Leaderboard</span>
-          </Link>
-          <Link
-            href="/profile"
-            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
-          >
-            <User className="w-6 h-6" strokeWidth={2} />
-            <span className="text-xs font-medium">Profile</span>
-          </Link>
-        </div>
-      </nav>
     </div>
   )
 }
+
