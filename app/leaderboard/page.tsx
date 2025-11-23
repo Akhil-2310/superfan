@@ -97,14 +97,18 @@ export default function LeaderboardPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to mint NFT')
+        console.error('NFT mint error response:', data)
+        const errorMsg = data.details 
+          ? `${data.error}: ${data.details}` 
+          : data.error || 'Failed to mint NFT'
+        throw new Error(errorMsg)
       }
 
       setNftClaimed(true)
-      alert('🏆 Legendary NFT minted successfully! Check your wallet.')
+      alert('🏆 Legendary NFT minted successfully! Check your wallet.\n\nTransaction: ' + data.transactionHash)
     } catch (err: any) {
       console.error('Error claiming NFT:', err)
-      alert(err.message || 'Failed to claim NFT')
+      alert('Error claiming NFT:\n' + (err.message || 'Failed to claim NFT'))
     } finally {
       setClaimingNFT(false)
     }
