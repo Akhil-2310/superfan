@@ -62,6 +62,7 @@ export default function PredictionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<'available' | 'my-predictions'>('available')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     if (!isConnected || !address) {
@@ -71,7 +72,7 @@ export default function PredictionsPage() {
     
     loadMatches()
     loadMyPredictions()
-  }, [address, isConnected])
+  }, [address, isConnected, refreshKey])
 
   const loadMatches = async () => {
     setLoading(true)
@@ -88,44 +89,23 @@ export default function PredictionsPage() {
   }
 
   const loadMyPredictions = async () => {
-    if (!address) return
+    if (!address || !PREDICTION_MARKET_ADDRESS) return
     
     try {
-      const { data, error: fetchError } = await supabase
-        .from('user_predictions')
-        .select(`
-          *,
-          match_predictions:prediction_id (
-            match_id,
-            home_team,
-            away_team,
-            match_date
-          )
-        `)
-        .eq('user_wallet', address)
-        .order('created_at', { ascending: false })
-        .limit(20)
+      // For now, we'll load predictions by checking each match
+      // In production, you'd want to index this with The Graph or similar
+      const predictions: Prediction[] = []
       
-      if (!fetchError && data) {
-        // Transform the data to match the Prediction interface
-        const transformedData = data.map((pred: any) => ({
-          id: pred.id,
-          match_id: pred.match_predictions?.match_id || pred.prediction_id,
-          user_wallet: pred.user_wallet,
-          predicted_winner: pred.predicted_winner,
-          confidence: 70, // Default confidence
-          stake_amount: pred.stake_amount,
-          created_at: pred.created_at,
-          match: {
-            id: pred.match_predictions?.match_id || pred.prediction_id,
-            home_team: pred.match_predictions?.home_team || 'Unknown',
-            away_team: pred.match_predictions?.away_team || 'Unknown',
-            match_date: pred.match_predictions?.match_date || new Date().toISOString(),
-            league: 'Football',
-            status: 'upcoming' as const,
-          }
-        }))
-        setMyPredictions(transformedData)
+      // Get all matches from the smart contract
+      const response = await fetch('/api/predictions/my-predictions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: address })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        setMyPredictions(data.predictions || [])
       }
     } catch (err) {
       console.error('Error loading predictions:', err)
@@ -299,6 +279,14 @@ export default function PredictionsPage() {
                       onPredict={handlePrediction}
                       isSubmitting={submitting === match.id}
                       disabled={submitting !== null}
+                      onSuccess={() => {
+                        setSuccess('Prediction placed successfully! 🎯')
+                        setRefreshKey(prev => prev + 1)
+                        setTimeout(() => {
+                          setSuccess(null)
+                          setSelectedTab('my-predictions')
+                        }, 2000)
+                      }}
                     />
                   ))
                 )}
@@ -429,6 +417,7 @@ function MatchPredictionCard({
   onPredict,
   isSubmitting,
   disabled,
+  onSuccess,
 }: {
   match: UpcomingMatch
   onPredict: (
@@ -443,6 +432,7 @@ function MatchPredictionCard({
   ) => void
   isSubmitting: boolean
   disabled: boolean
+  onSuccess?: () => void
 }) {
   const { address } = useAccount()
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null)
@@ -561,8 +551,13 @@ function MatchPredictionCard({
       setIsPredicting(false)
       setSelectedWinner(null)
       setTimeout(() => setTxStatus(''), 3000)
+      
+      // Trigger success callback to refresh predictions list
+      if (onSuccess) {
+        onSuccess()
+      }
     }
-  }, [predictHash, isPredictConfirming])
+  }, [predictHash, isPredictConfirming, onSuccess])
 
   const potentialReward = stakeAmount * 1.8 // Simple 1.8x multiplier
   const isProcessing = isApproving || isPredicting || isApproveConfirming || isPredictConfirming
