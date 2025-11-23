@@ -226,7 +226,7 @@ export default function OnboardingPage() {
             </div>
             
             <div>
-              <h1 className="text-3xl font-bold text-[#121212] mb-2">Welcome to FanFi</h1>
+              <h1 className="text-3xl font-bold text-[#121212] mb-2">Welcome to SuperFan</h1>
               <p className="text-[#6E6E6E]">Connect your wallet to get started</p>
             </div>
 

@@ -29,7 +29,7 @@ export function Navbar() {
               <Flame className="w-6 h-6 text-white" strokeWidth={2.5} />
             </div>
             <div className="hidden sm:block">
-              <h1 className="text-xl font-bold text-[#141414]">FanFi</h1>
+              <h1 className="text-xl font-bold text-[#141414]">SuperFan</h1>
               <p className="text-xs text-[#6E6E6E]">Sports x DeFi</p>
             </div>
           </Link>

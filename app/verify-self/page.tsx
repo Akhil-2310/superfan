@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAccount } from "wagmi"
 import { Shield, Check, Loader2, Globe } from "lucide-react"
 import { getSupportedCountries, createDemoVerification } from "@/lib/api/self-verification"
 import { supabase } from "@/lib/supabase/client"
 
-export default function VerifySelfPage() {
+function VerifySelfPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { address, isConnected } = useAccount()
@@ -176,6 +176,18 @@ export default function VerifySelfPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function VerifySelfPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#FF1744] animate-spin" />
+      </div>
+    }>
+      <VerifySelfPageContent />
+    </Suspense>
   )
 }
 

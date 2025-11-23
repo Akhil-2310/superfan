@@ -136,7 +136,7 @@ export default function DashboardPage() {
               <div className="w-10 h-10 bg-[#CE1141] rounded-xl flex items-center justify-center">
                 <Flame className="w-6 h-6 text-white" strokeWidth={2.5} />
               </div>
-              <span className="font-bold text-xl text-[#121212] hidden md:block">FanFi</span>
+              <span className="font-bold text-xl text-[#121212] hidden md:block">SuperFan</span>
             </Link>
             <div className="hidden md:flex items-center gap-6">
               <Link href="/dashboard" className="text-[#CE1141] font-semibold flex items-center gap-2">
