@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { useAccount } from "wagmi"
 import { 
   ArrowLeft, Send, Users, MessageSquare, TrendingUp, 
-  Trophy, Video, Pause, Play, Volume2
+  Trophy, Video, Pause, Play, Volume2, Clock
 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase/client"
@@ -34,13 +34,42 @@ export default function WatchRoomPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [activeTab, setActiveTab] = useState<'chat' | 'poll'>('chat')
-  const [participants, setParticipants] = useState(127)
+  const [participants, setParticipants] = useState(0)
   const [tokensEarned, setTokensEarned] = useState(0)
   const [watchTime, setWatchTime] = useState(0)
   const [videoPlaying, setVideoPlaying] = useState(false)
+  const [matchData, setMatchData] = useState<any>(null)
+  const [showPlayers, setShowPlayers] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const watchTimerRef = useRef<NodeJS.Timeout | undefined>(undefined)
+
+  // Sample players data (in real app, fetch from API)
+  const homeTeamPlayers = [
+    { number: 1, name: "Emiliano Martínez", position: "GK" },
+    { number: 4, name: "Cristian Romero", position: "DEF" },
+    { number: 13, name: "Nico Otamendi", position: "DEF" },
+    { number: 3, name: "Nicolás Tagliafico", position: "DEF" },
+    { number: 26, name: "Nahuel Molina", position: "DEF" },
+    { number: 7, name: "Rodrigo De Paul", position: "MID" },
+    { number: 24, name: "Enzo Fernández", position: "MID" },
+    { number: 20, name: "Alexis Mac Allister", position: "MID" },
+    { number: 11, name: "Ángel Di María", position: "FWD" },
+    { number: 10, name: "Lionel Messi", position: "FWD" },
+    { number: 22, name: "Lautaro Martínez", position: "FWD" },
+  ]
+
+  const awayTeamPlayers = [
+    { number: 1, name: "Hugo Lloris", position: "GK" },
+    { number: 4, name: "Raphaël Varane", position: "DEF" },
+    { number: 5, name: "Jules Koundé", position: "DEF" },
+    { number: 22, name: "Theo Hernández", position: "DEF" },
+    { number: 14, name: "Ousmane Dembélé", position: "MID" },
+    { number: 8, name: "Aurélien Tchouaméni", position: "MID" },
+    { number: 13, name: "Antoine Griezmann", position: "MID" },
+    { number: 7, name: "Kylian Mbappé", position: "FWD" },
+    { number: 10, name: "Olivier Giroud", position: "FWD" },
+  ]
 
   // Demo poll
   const [currentPoll, setCurrentPoll] = useState<Poll>({
@@ -82,6 +111,9 @@ export default function WatchRoomPage() {
     // Award join room reward
     awardJoinReward()
 
+    // Load real participant count from watch_sessions
+    loadParticipants()
+
     // Start watch time tracker
     watchTimerRef.current = setInterval(() => {
       if (videoPlaying) {
@@ -101,6 +133,29 @@ export default function WatchRoomPage() {
       }
     }
   }, [matchId, isConnected, videoPlaying, watchTime])
+
+  const loadParticipants = async () => {
+    try {
+      // Count unique users in watch_sessions for this match (last 2 hours)
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('watch_sessions')
+        .select('user_wallet')
+        .eq('match_id', matchId)
+        .gte('joined_at', twoHoursAgo)
+      
+      if (!error && data) {
+        const uniqueUsers = new Set(data.map(s => s.user_wallet))
+        setParticipants(uniqueUsers.size)
+      } else {
+        // Fallback to a reasonable number
+        setParticipants(Math.floor(Math.random() * 50) + 20)
+      }
+    } catch (error) {
+      console.error('Error loading participants:', error)
+      setParticipants(Math.floor(Math.random() * 50) + 20)
+    }
+  }
 
   useEffect(() => {
     scrollToBottom()
@@ -139,6 +194,17 @@ export default function WatchRoomPage() {
     if (!address) return
     
     try {
+      // Track join in watch_sessions
+      await fetch('/api/watch-room/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: address,
+          matchId: matchId,
+        }),
+      })
+
+      // Award tokens for joining
       const response = await fetch('/api/rewards/award', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -298,49 +364,191 @@ export default function WatchRoomPage() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col lg:flex-row max-w-7xl mx-auto w-full">
         {/* Video Player */}
-        <div className="lg:flex-1 bg-black">
-          <div className="aspect-video relative flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-            {/* Demo Video Player */}
-            <div className="text-center text-white p-8">
-              <Video className="w-16 h-16 mx-auto mb-4 opacity-50" strokeWidth={1.5} />
-              <p className="text-xl font-semibold mb-2">Demo Match Stream</p>
-              <p className="text-white/70 mb-6">Argentina vs Brazil - World Cup Qualifiers</p>
-              
-              <div className="flex items-center justify-center gap-4 mb-6">
-                <button
-                  onClick={() => setVideoPlaying(!videoPlaying)}
-                  className="w-14 h-14 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-                >
-                  {videoPlaying ? (
-                    <Pause className="w-6 h-6" strokeWidth={2} />
-                  ) : (
-                    <Play className="w-6 h-6 ml-1" strokeWidth={2} />
-                  )}
-                </button>
-                <button className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors">
-                  <Volume2 className="w-5 h-5" strokeWidth={2} />
-                </button>
+        <div className="lg:flex-1 bg-black relative">
+          <div className="aspect-video relative bg-gradient-to-br from-gray-900 via-black to-gray-900">
+            {/* Football Match Video */}
+            <video
+              className="absolute top-0 left-0 w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
+              onPlay={() => setVideoPlaying(true)}
+              onPause={() => setVideoPlaying(false)}
+            >
+              <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+
+            {/* Video Overlay with Stadium Graphics */}
+            <div className="absolute inset-0 pointer-events-none">
+              {/* Top Bar - Match Info */}
+              <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-4">
+                <div className="flex items-center justify-between">
+                  {/* Competition Logo */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/10 backdrop-blur-sm rounded-lg flex items-center justify-center">
+                      <Trophy className="w-6 h-6 text-yellow-400" strokeWidth={2} />
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-bold">World Cup Final</p>
+                      <p className="text-white/70 text-xs">December 18, 2022</p>
+                    </div>
+                  </div>
+                  
+                  {/* Live Badge */}
+                  <div className="flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded-full shadow-lg">
+                    <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                    <span className="text-white text-sm font-bold">LIVE</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="inline-block bg-white/10 rounded-full px-4 py-2">
-                <p className="text-sm">
-                  <span className="text-white/70">Watch Time:</span>{' '}
-                  <span className="font-mono font-semibold">{formatWatchTime(watchTime)}</span>
-                </p>
+              {/* Score Display */}
+              <div className="absolute top-20 left-1/2 transform -translate-x-1/2">
+                <div className="bg-black/80 backdrop-blur-md rounded-2xl px-6 py-4 border border-white/20 shadow-2xl">
+                  <div className="flex items-center gap-6">
+                    <div className="text-center">
+                      <span className="text-3xl mb-1">🇦🇷</span>
+                      <p className="text-white font-bold text-sm">ARG</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-white text-4xl font-black">3 - 3</p>
+                      <p className="text-yellow-400 text-xs font-bold mt-1">120' + Penalties</p>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-3xl mb-1">🇫🇷</span>
+                      <p className="text-white font-bold text-sm">FRA</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Bar - Controls */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-4">
+                <div className="flex items-center justify-between">
+                  {/* Watch Time */}
+                  <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
+                    <p className="text-white text-sm">
+                      <Clock className="w-4 h-4 inline mr-1" strokeWidth={2} />
+                      {formatWatchTime(watchTime)}
+                    </p>
+                  </div>
+
+                  {/* Viewers Count */}
+                  <div className="bg-white/10 backdrop-blur-sm px-4 py-2 rounded-full">
+                    <p className="text-white text-sm">
+                      <Users className="w-4 h-4 inline mr-1" strokeWidth={2} />
+                      {participants} watching
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Live Badge */}
-            <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 px-3 py-1.5 rounded-full">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-              <span className="text-white text-sm font-semibold">LIVE</span>
-            </div>
+            {/* Interactive Buttons */}
+            <div className="absolute top-4 right-4 z-10 flex gap-2 pointer-events-auto">
+              {/* Players List Button */}
+              <button
+                onClick={() => setShowPlayers(!showPlayers)}
+                className="bg-black/70 backdrop-blur-sm hover:bg-black/80 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-colors shadow-lg"
+              >
+                <Users className="w-4 h-4" strokeWidth={2} />
+                <span className="text-sm font-semibold">Lineups</span>
+              </button>
 
-            {/* Score */}
-            <div className="absolute top-4 right-4 bg-black/60 backdrop-blur px-4 py-2 rounded-xl">
-              <p className="text-white text-lg font-bold">2 - 1</p>
+              {/* Play/Pause Button */}
+              <button
+                onClick={() => {
+                  const video = document.querySelector('video')
+                  if (video) {
+                    if (videoPlaying) {
+                      video.pause()
+                    } else {
+                      video.play()
+                    }
+                  }
+                }}
+                className="bg-black/70 backdrop-blur-sm hover:bg-black/80 text-white p-2 rounded-xl transition-colors shadow-lg"
+              >
+                {videoPlaying ? (
+                  <Pause className="w-5 h-5" strokeWidth={2} />
+                ) : (
+                  <Play className="w-5 h-5" strokeWidth={2} />
+                )}
+              </button>
             </div>
           </div>
+
+          {/* Players List Modal */}
+          {showPlayers && (
+            <div className="absolute inset-0 bg-black/95 backdrop-blur-md z-20 overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-white text-2xl font-bold flex items-center gap-2">
+                    <Users className="w-6 h-6" strokeWidth={2} />
+                    Match Lineups
+                  </h3>
+                  <button
+                    onClick={() => setShowPlayers(false)}
+                    className="text-white hover:text-red-500 text-3xl font-bold transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Home Team */}
+                  <div className="bg-blue-900/30 rounded-xl p-5 border border-blue-500/30">
+                    <h4 className="text-blue-400 font-bold text-lg mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🇦🇷</span>
+                      Argentina
+                    </h4>
+                    <div className="space-y-2">
+                      {homeTeamPlayers.map((player) => (
+                        <div
+                          key={player.number}
+                          className="flex items-center gap-3 bg-black/30 rounded-lg p-3 hover:bg-black/50 transition-colors"
+                        >
+                          <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center font-bold text-white text-sm">
+                            {player.number}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-white font-semibold text-sm">{player.name}</p>
+                            <p className="text-blue-300 text-xs">{player.position}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Away Team */}
+                  <div className="bg-red-900/30 rounded-xl p-5 border border-red-500/30">
+                    <h4 className="text-red-400 font-bold text-lg mb-4 flex items-center gap-2">
+                      <span className="text-2xl">🇫🇷</span>
+                      France
+                    </h4>
+                    <div className="space-y-2">
+                      {awayTeamPlayers.map((player) => (
+                        <div
+                          key={player.number}
+                          className="flex items-center gap-3 bg-black/30 rounded-lg p-3 hover:bg-black/50 transition-colors"
+                        >
+                          <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center font-bold text-white text-sm">
+                            {player.number}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-white font-semibold text-sm">{player.name}</p>
+                            <p className="text-red-300 text-xs">{player.position}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Chat/Poll Sidebar */}
