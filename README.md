@@ -25,6 +25,26 @@ A comprehensive Web3 fan engagement application that combines sports fandom, soc
 - Automated reward distribution
 - Yield vaults with boosted APY
 
+
+
+## 📄 Contract Deployments
+
+| # | Contract Name | Network | Address | Block Explorer |
+|---|--------------|---------|---------|----------------|
+| 1 | **FanFiToken.sol** | Chiliz Spicy Testnet | `0xCee0c15B42EEb44491F588104bbC46812115dBB0` | [View on Explorer](https://testnet.chiliscan.com/address/0xCee0c15B42EEb44491F588104bbC46812115dBB0) |
+| 2 | **FanFiAchievements.sol** | Chiliz Spicy Testnet | `0x99466103FaC328a7596DEAF4b728e24E69d252bc` | [View on Explorer](https://testnet.chiliscan.com/address/0x99466103FaC328a7596DEAF4b728e24E69d252bc) |
+| 3 | **FanStakingPool.sol** | Chiliz Spicy Testnet | `0x7A08F64Ed4A17440a3744D6D9C53E6516Bf067AC` | [View on Explorer](https://testnet.chiliscan.com/address/0x7A08F64Ed4A17440a3744D6D9C53E6516Bf067AC) |
+| 4 | **PredictionMarket.sol** | Chiliz Spicy Testnet | `0x937b73F1B7334E41c2DC93f3AbBe093a41CeDad3` | [View on Explorer](https://testnet.chiliscan.com/address/0x937b73F1B7334E41c2DC93f3AbBe093a41CeDad3) |
+| 5 | **ProofOfHuman.sol** | Celo Sepolia | `0x047408f73705Ea6b0Edd8eDFDCa40dfCF63830A1` | [View on Explorer](https://celo-sepolia.blockscout.com/address/0x047408f73705Ea6b0Edd8eDFDCa40dfCF63830A1) |
+
+---
+
+## 📦 ABI & Source Code
+
+You can find the contract ABIs and source code in the `/contracts` folder:
+
+
+
 ## 🏗️ Architecture
 
 ### Frontend
