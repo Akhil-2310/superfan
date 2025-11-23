@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Ticket, Sparkles } from "lucide-react"
+import { Check, ExternalLink, Sparkles } from "lucide-react"
 import Link from "next/link"
 
 export default function RewardClaimedPage() {
@@ -17,21 +17,21 @@ export default function RewardClaimedPage() {
         <h1 className="text-[#121212] text-3xl md:text-4xl font-bold text-center mb-4">Reward Claimed!</h1>
 
         {/* Subtitle */}
-        <p className="text-[#6E6E6E] text-center text-lg mb-12">Your NFT ticket has been added to your wallet</p>
+        <p className="text-[#6E6E6E] text-center text-lg mb-12">Your team jersey NFT has been added to your wallet</p>
 
         {/* NFT Card */}
         <div className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-3xl p-6 mb-6 shadow-[0_2px_6px_rgba(0,0,0,0.06)]">
           {/* NFT Visual */}
-          <div className="bg-gradient-to-br from-[#4A6FA5] via-[#6B7F9F] to-[#D4B86A] rounded-2xl p-8 mb-6 relative overflow-hidden">
+          <div className="bg-gradient-to-br from-[#0033A0] via-[#4A6FA5] to-[#F7D020] rounded-2xl p-8 mb-6 relative overflow-hidden">
             {/* NFT Badge */}
             <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-full flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-white" strokeWidth={2} />
               <span className="text-white text-sm font-medium">NFT</span>
             </div>
 
-            {/* Ticket Icon */}
+            {/* Jersey Icon */}
             <div className="flex justify-center">
-              <Ticket className="w-32 h-32 text-white" strokeWidth={2} />
+              <span className="text-9xl">👕</span>
             </div>
 
             {/* Decorative circles on sides */}
@@ -42,8 +42,8 @@ export default function RewardClaimedPage() {
           {/* NFT Details */}
           <div className="space-y-4">
             <div>
-              <h2 className="text-[#121212] text-2xl font-bold mb-2">Free Matchday Pass</h2>
-              <p className="text-[#6E6E6E] text-lg">Argentina vs. TBD</p>
+              <h2 className="text-[#121212] text-2xl font-bold mb-2">Free Team Jersey</h2>
+              <p className="text-[#6E6E6E] text-lg">Official Argentina National Team Jersey</p>
             </div>
 
             <div className="border-t border-[#E4E4E4] pt-4 flex items-center justify-between">
@@ -78,7 +78,7 @@ export default function RewardClaimedPage() {
         {/* Confetti decoration */}
         <div className="flex justify-center mb-6">
           <div className="relative">
-            <span className="text-4xl">🎟️</span>
+            <span className="text-4xl">👕</span>
           </div>
         </div>
 

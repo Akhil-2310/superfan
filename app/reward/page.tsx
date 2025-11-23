@@ -1,6 +1,6 @@
 "use client"
 
-import { X, Trophy, Ticket, Sparkles } from "lucide-react"
+import { X, Trophy } from "lucide-react"
 import Link from "next/link"
 
 export default function RewardPage() {
@@ -34,27 +34,26 @@ export default function RewardPage() {
         <div className="bg-white border border-[#E4E4E4] rounded-2xl p-6 mb-8 shadow-[0_2px_6px_rgba(0,0,0,0.06)]">
           <div className="flex items-start gap-6">
             {/* NFT Icon */}
-            <div className="w-24 h-24 bg-[#F7D020] rounded-2xl flex items-center justify-center flex-shrink-0">
-              <Ticket className="w-12 h-12 text-[#121212]" strokeWidth={2.5} />
+            <div className="w-24 h-24 bg-[#0033A0] rounded-2xl flex items-center justify-center flex-shrink-0">
+              <span className="text-5xl">👕</span>
             </div>
 
             {/* NFT Details */}
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-5 h-5 text-[#CE1141]" strokeWidth={2} />
                 <span className="text-[#CE1141] font-semibold">Exclusive NFT</span>
               </div>
-              <h2 className="text-[#121212] text-2xl font-bold mb-2">Free Ticket NFT</h2>
-              <p className="text-[#6E6E6E] text-lg mb-1">Matchday Pass</p>
-              <p className="text-[#6E6E6E]">Argentina vs. TBD</p>
+              <h2 className="text-[#121212] text-2xl font-bold mb-2">Free Team Jersey</h2>
+              <p className="text-[#6E6E6E] text-lg mb-1">Official Argentina Jersey</p>
+              <p className="text-[#6E6E6E]">Limited Edition #1 Fan Reward</p>
             </div>
           </div>
         </div>
 
         {/* CTA Button */}
-        <Link href="/connect-wallet" className="block">
+        <Link href="/reward/claimed" className="block">
           <button className="w-full bg-[#CE1141] hover:bg-[#B01038] text-white text-lg font-bold py-5 rounded-2xl transition-colors">
-            Connect Wallet to Claim
+            Claim Reward
           </button>
         </Link>
       </div>
