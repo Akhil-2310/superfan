@@ -4,8 +4,8 @@
   "description": "FanFi - Chiliz Fan Engagement Platform",
   "private": true,
   "scripts": {
-    "build": "next build",
-    "dev": "next dev",
+    "build": "next build --webpack",
+    "dev": "next dev --turbo",
     "lint": "eslint .",
     "start": "next start"
   },
