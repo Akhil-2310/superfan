@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAccount } from "wagmi"
 import {
   Home,
   Zap,
@@ -14,6 +15,7 @@ import {
   Award,
   Flame,
   Loader2,
+  Sparkles,
 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase/client"
@@ -30,13 +32,19 @@ interface LeaderboardEntry {
 
 export default function LeaderboardPage() {
   const router = useRouter()
+  const { address } = useAccount()
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [timeframe, setTimeframe] = useState<'all' | 'week' | 'month'>('all')
+  const [claimingNFT, setClaimingNFT] = useState(false)
+  const [nftClaimed, setNftClaimed] = useState(false)
 
   useEffect(() => {
     loadLeaderboard()
-  }, [timeframe])
+    if (address) {
+      checkNFTClaimed()
+    }
+  }, [timeframe, address])
 
   const loadLeaderboard = async () => {
     setLoading(true)
@@ -55,6 +63,54 @@ export default function LeaderboardPage() {
       setLoading(false)
     }
   }
+
+  const checkNFTClaimed = async () => {
+    if (!address) return
+    
+    try {
+      const { data, error } = await supabase
+        .from('nft_claims')
+        .select('*')
+        .eq('user_wallet', address)
+        .eq('nft_type', 'leaderboard_champion')
+        .single()
+
+      if (!error && data) {
+        setNftClaimed(true)
+      }
+    } catch (error) {
+      // No claim found, which is fine
+    }
+  }
+
+  const handleClaimNFT = async () => {
+    if (!address || claimingNFT) return
+
+    setClaimingNFT(true)
+    try {
+      const response = await fetch('/api/nft/mint-leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: address })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to mint NFT')
+      }
+
+      setNftClaimed(true)
+      alert('🏆 Legendary NFT minted successfully! Check your wallet.')
+    } catch (err: any) {
+      console.error('Error claiming NFT:', err)
+      alert(err.message || 'Failed to claim NFT')
+    } finally {
+      setClaimingNFT(false)
+    }
+  }
+
+  const isTopUser = address && leaderboard[0]?.wallet_address?.toLowerCase() === address.toLowerCase()
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -138,6 +194,30 @@ export default function LeaderboardPage() {
       {/* Main Content */}
       <main className="px-4 py-8 pb-24">
         <div className="max-w-4xl mx-auto space-y-6">
+          {/* NFT Reward Banner - Only show to #1 user */}
+          {isTopUser && !nftClaimed && (
+            <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 rounded-3xl p-6 text-white shadow-xl">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                  <Sparkles className="w-8 h-8" strokeWidth={2.5} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold mb-1">🏆 You're #1!</h3>
+                  <p className="text-sm opacity-90">
+                    Claim your exclusive Legendary NFT as the top SuperFan!
+                  </p>
+                </div>
+                <button
+                  onClick={handleClaimNFT}
+                  disabled={claimingNFT}
+                  className="px-6 py-3 bg-white text-purple-600 font-bold rounded-xl hover:bg-opacity-90 transition-all disabled:opacity-50"
+                >
+                  {claimingNFT ? 'Minting...' : 'Claim Now'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Top 3 Podium */}
           {!loading && leaderboard.length >= 3 && (
             <div className="grid grid-cols-3 gap-4 mb-8">
@@ -167,6 +247,34 @@ export default function LeaderboardPage() {
                     {leaderboard[0].verified_name || `${leaderboard[0].wallet_address.slice(0, 6)}...`}
                   </p>
                   <p className="text-green-600 font-bold text-xl">{leaderboard[0].total_tokens} FANFI</p>
+                  
+                  {/* NFT Claim Button - Only for #1 user */}
+                  {isTopUser && !nftClaimed && (
+                    <button
+                      onClick={handleClaimNFT}
+                      disabled={claimingNFT}
+                      className="mt-3 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2 mx-auto"
+                    >
+                      {claimingNFT ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Minting...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          Claim NFT
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
+                  {isTopUser && nftClaimed && (
+                    <div className="mt-3 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-sm font-bold rounded-xl flex items-center gap-2 mx-auto">
+                      <Award className="w-4 h-4" />
+                      NFT Claimed!
+                    </div>
+                  )}
                 </div>
               </div>
 
