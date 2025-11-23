@@ -1,7 +1,13 @@
+"use client"
+
 import Link from "next/link"
 import Image from "next/image"
+import { useAccount } from "wagmi"
+import { ConnectButton } from "@rainbow-me/rainbowkit"
 
 export default function Page() {
+  const { isConnected } = useAccount()
+
   return (
     <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-12">
       {/* Hero Section */}
@@ -21,14 +27,29 @@ export default function Page() {
           <p className="text-xl md:text-2xl text-[#6E6E6E] font-normal text-balance">Earn and stake Fan Tokens™</p>
         </div>
 
-        <div className="flex flex-col items-center space-y-2 w-full mt-8">
-          <Link
-            href="/choose-team"
-            className="w-full bg-[#CE1141] hover:bg-[#B50E36] transition-colors text-white text-lg md:text-xl font-semibold py-4 rounded-2xl shadow-md"
-          >
-            Create profile
-          </Link>
-          <p className="text-sm text-[#A0A0A0]">Verified by Self.xyz</p>
+        <div className="flex flex-col items-center space-y-4 w-full mt-8">
+          {isConnected ? (
+            <Link
+              href="/onboarding"
+              className="w-full bg-[#CE1141] hover:bg-[#B50E36] transition-colors text-white text-lg md:text-xl font-semibold py-4 rounded-2xl shadow-md"
+            >
+              Continue to Verification
+            </Link>
+          ) : (
+            <div className="w-full">
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <button
+                    onClick={openConnectModal}
+                    className="w-full bg-[#CE1141] hover:bg-[#B50E36] transition-colors text-white text-lg md:text-xl font-semibold py-4 rounded-2xl shadow-md"
+                  >
+                    Connect Wallet
+                  </button>
+                )}
+              </ConnectButton.Custom>
+            </div>
+          )}
+          <p className="text-sm text-[#A0A0A0]">Verified by Self.xyz · Powered by Chiliz</p>
         </div>
       </section>
     </main>

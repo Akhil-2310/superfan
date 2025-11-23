@@ -2,13 +2,14 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { Web3Provider } from "@/lib/providers/Web3Provider"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Chiliz Fan Verification - Become a Verified Superfan",
-  description: "Create your Fan Passport with Self and unlock exclusive rewards, NFTs, and free tickets",
+  title: "FanFi - Chiliz Fan Engagement & Rewards",
+  description: "Create your Fan Passport with Self, earn Fan Tokens, and join watch rooms",
   generator: "v0.app",
   icons: {
     icon: [
@@ -37,8 +38,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} antialiased`}>
+        <Web3Provider>
         {children}
         <Analytics />
+        </Web3Provider>
       </body>
     </html>
   )
