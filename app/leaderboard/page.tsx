@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronLeft, TrendingUp, TrendingDown, Trophy, User } from "lucide-react"
+import { ChevronLeft, TrendingUp, TrendingDown, Trophy, User, Home, Zap, Swords } from "lucide-react"
 import Link from "next/link"
 import { useState } from "react"
 import Image from "next/image"
@@ -8,14 +8,24 @@ import Image from "next/image"
 const leaderboardData = [
   {
     rank: 1,
-    name: "Alex Johnson",
+    name: "Mira Bianchi",
     points: 8450,
     badges: ["🏟️", "⭐", "🎫"],
-    change: 2,
+    change: 1,
     changeDirection: "up" as const,
+    isCurrentUser: true,
+    newAchievement: "Stadium Attendance Verified",
   },
   {
     rank: 2,
+    name: "Alex Johnson",
+    points: 8200,
+    badges: ["🏟️", "⭐"],
+    change: 1,
+    changeDirection: "down" as const,
+  },
+  {
+    rank: 3,
     name: "Sarah Martinez",
     points: 7890,
     badges: ["🏟️", "⭐"],
@@ -23,30 +33,20 @@ const leaderboardData = [
     changeDirection: "down" as const,
   },
   {
-    rank: 3,
+    rank: 4,
     name: "Mike Chen",
     points: 7234,
     badges: ["⭐", "🎫"],
-    change: 1,
-    changeDirection: "up" as const,
-  },
-  {
-    rank: 4,
-    name: "Emma Wilson",
-    points: 6890,
-    badges: ["🏟️"],
     change: 0,
     changeDirection: null,
   },
   {
     rank: 5,
-    name: "Mira Bianchi",
-    points: 6450,
-    badges: ["🏟️", "⭐"],
+    name: "Emma Wilson",
+    points: 6890,
+    badges: ["🏟️"],
     change: 1,
-    changeDirection: "up" as const,
-    isCurrentUser: true,
-    newAchievement: "Stadium Attendance Verified",
+    changeDirection: "down" as const,
   },
   {
     rank: 6,
@@ -114,7 +114,7 @@ export default function LeaderboardPage() {
       </nav>
 
       {/* Leaderboard List */}
-      <main className="px-4 space-y-3">
+      <main className="px-4 space-y-3 pb-24">
         {leaderboardData.map((user) => (
           <article
             key={user.rank}
@@ -208,6 +208,43 @@ export default function LeaderboardPage() {
           </article>
         ))}
       </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E4E4E4] shadow-lg">
+        <div className="max-w-2xl mx-auto px-2 py-3 flex items-center justify-around">
+          <Link
+            href="/dashboard"
+            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
+          >
+            <Home className="w-6 h-6" strokeWidth={2} />
+            <span className="text-xs font-medium">Dashboard</span>
+          </Link>
+          <Link
+            href="/engage"
+            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
+          >
+            <Zap className="w-6 h-6" strokeWidth={2} />
+            <span className="text-xs font-medium">Engage</span>
+          </Link>
+          <Link
+            href="/duels"
+            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
+          >
+            <Swords className="w-6 h-6" strokeWidth={2} />
+            <span className="text-xs font-medium">Fan Duels</span>
+          </Link>
+          <button className="flex flex-col items-center gap-1 text-[#CE1141] group" aria-current="page">
+            <Trophy className="w-6 h-6" strokeWidth={2} />
+            <span className="text-xs font-medium">Leaderboard</span>
+          </button>
+          <Link
+            href="/profile"
+            className="flex flex-col items-center gap-1 text-[#6E6E6E] hover:text-[#121212] transition-colors group"
+          >
+            <User className="w-6 h-6" strokeWidth={2} />
+            <span className="text-xs font-medium">Profile</span>
+          </Link>
+        </div>
+      </nav>
     </div>
   )
 }
