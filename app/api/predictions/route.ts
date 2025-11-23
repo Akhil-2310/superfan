@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 // GET /api/predictions - Fetch available predictions
 export async function GET(request: Request) {
@@ -7,7 +7,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const wallet = searchParams.get('wallet')
     
-    const supabase = createClient()
 
     // Fetch open predictions (betting not closed yet)
     const { data: predictions, error: predictionsError } = await supabase
@@ -78,45 +77,25 @@ export async function POST(request: Request) {
     const body = await request.json()
     const {
       wallet,
-      predictionId,
+      matchId,
       predictedWinner,
-      predictedHomeScore,
-      predictedAwayScore,
-      confidenceLevel,
+      confidence,
       stakeAmount,
     } = body
 
-    if (!wallet || !predictionId || !predictedWinner) {
+    if (!wallet || !matchId || !predictedWinner) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    const supabase = createClient()
-
-    // Verify prediction exists and is open
-    const { data: prediction, error: predError } = await supabase
+    // Check if user already predicted for this match
+    const { data: existing } = await supabase
       .from('match_predictions')
       .select('*')
-      .eq('id', predictionId)
-      .gte('betting_closes_at', new Date().toISOString())
-      .eq('finalized', false)
-      .single()
-
-    if (predError || !prediction) {
-      return NextResponse.json(
-        { error: 'Prediction not found or closed' },
-        { status: 404 }
-      )
-    }
-
-    // Check if user already predicted
-    const { data: existing } = await supabase
-      .from('user_predictions')
-      .select('*')
       .eq('user_wallet', wallet)
-      .eq('prediction_id', predictionId)
+      .eq('match_id', matchId)
       .single()
 
     if (existing) {
@@ -126,45 +105,25 @@ export async function POST(request: Request) {
       )
     }
 
-    // Verify user has enough tokens if staking
-    if (stakeAmount > 0) {
-      const { data: user } = await supabase
-        .from('users')
-        .select('total_tokens')
-        .eq('wallet_address', wallet)
-        .single()
+    // Note: Token staking is tracked on-chain, not in database
+    // Users should have FANFI tokens in their wallet to stake
+    // The actual token locking happens through smart contracts
+    // For now, predictions can be made without upfront token deduction
 
-      if (!user || user.total_tokens < stakeAmount) {
-        return NextResponse.json(
-          { error: 'Insufficient tokens' },
-          { status: 400 }
-        )
-      }
-
-      // Deduct stake from user's balance
-      await supabase
-        .from('users')
-        .update({
-          total_tokens: user.total_tokens - stakeAmount,
-        })
-        .eq('wallet_address', wallet)
-    }
-
-    // Calculate potential reward (simple 2x for now, can be more sophisticated)
-    const potentialReward = stakeAmount * 2
+    // Calculate potential reward based on confidence
+    const potentialReward = Math.floor(stakeAmount * (confidence / 50))
 
     // Create prediction
     const { data: userPrediction, error: createError } = await supabase
-      .from('user_predictions')
+      .from('match_predictions')
       .insert({
         user_wallet: wallet,
-        prediction_id: predictionId,
+        match_id: matchId,
         predicted_winner: predictedWinner,
-        predicted_home_score: predictedHomeScore,
-        predicted_away_score: predictedAwayScore,
-        confidence_level: confidenceLevel || 'medium',
-        stake_amount: stakeAmount || 0,
+        confidence,
+        stake_amount: stakeAmount || 50,
         potential_reward: potentialReward,
+        status: 'pending',
       })
       .select()
       .single()
@@ -175,6 +134,52 @@ export async function POST(request: Request) {
         { error: 'Failed to create prediction' },
         { status: 500 }
       )
+    }
+
+    // ===== AUTO-COMPLETE PREDICTION QUESTS =====
+    // Check for prediction-related quests
+    const { data: predictionQuests } = await supabase
+      .from('quests')
+      .select('id')
+      .eq('category', 'prediction')
+      .eq('active', true)
+
+    if (predictionQuests && predictionQuests.length > 0) {
+      for (const quest of predictionQuests) {
+        // Check if user already has this quest
+        const { data: userQuest } = await supabase
+          .from('user_quests')
+          .select('*')
+          .eq('user_wallet', wallet)
+          .eq('quest_id', quest.id)
+          .single()
+
+        if (!userQuest) {
+          // Create quest progress entry
+          await supabase
+            .from('user_quests')
+            .insert({
+              user_wallet: wallet,
+              quest_id: quest.id,
+              progress: { predictions_made: 1 },
+              completed: true,
+              completed_at: new Date().toISOString(),
+            })
+        } else if (!userQuest.completed) {
+          // Update progress
+          const currentProgress = userQuest.progress || {}
+          const predictionsMade = (currentProgress.predictions_made || 0) + 1
+          
+          await supabase
+            .from('user_quests')
+            .update({
+              progress: { predictions_made: predictionsMade },
+              completed: true,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', userQuest.id)
+        }
+      }
     }
 
     return NextResponse.json({

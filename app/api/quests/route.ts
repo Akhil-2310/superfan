@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
 
 // GET /api/quests - Fetch active quests for a user
 export async function GET(request: Request) {
@@ -10,8 +10,6 @@ export async function GET(request: Request) {
     if (!wallet) {
       return NextResponse.json({ error: 'Wallet address required' }, { status: 400 })
     }
-
-    const supabase = createClient()
 
     // Fetch active quests
     const { data: quests, error: questsError } = await supabase
@@ -27,7 +25,7 @@ export async function GET(request: Request) {
     }
 
     // Fetch user's quest progress
-    const { data: userQuests, error: userQuestsError } = await supabase
+    const { data: initialUserQuests, error: userQuestsError } = await supabase
       .from('user_quests')
       .select('*')
       .eq('user_wallet', wallet)
@@ -35,10 +33,79 @@ export async function GET(request: Request) {
     if (userQuestsError) {
       console.error('Error fetching user quests:', userQuestsError)
     }
+    
+    let userQuests = initialUserQuests
+
+    // Check if user is verified (for auto-completing "First Steps" quest)
+    const { data: userData } = await supabase
+      .from('users')
+      .select('self_verified, verified_name, nationality, wallet_address')
+      .eq('wallet_address', wallet)
+      .single()
+
+    const isVerified = userData && userData.self_verified === true
+
+    // Auto-complete "First Steps" quest if user is verified but not completed
+    if (isVerified) {
+      const firstStepsQuest = quests?.find(q => q.title === 'First Steps')
+      const userFirstStepsQuest = userQuests?.find(uq => uq.quest_id === firstStepsQuest?.id)
+      
+      if (firstStepsQuest && !userFirstStepsQuest?.completed) {
+        console.log(`Auto-completing "First Steps" quest for ${wallet}`)
+        
+        // Upsert synchronously
+        await supabase
+          .from('user_quests')
+          .upsert({
+            user_wallet: wallet,
+            quest_id: firstStepsQuest.id,
+            progress: { verified: true },
+            completed: true,
+            completed_at: new Date().toISOString(),
+            reward_claimed: false,
+          }, {
+            onConflict: 'user_wallet,quest_id'
+          })
+        
+        // Also create reward entry if not exists
+        const { data: existingReward } = await supabase
+          .from('user_rewards')
+          .select('id')
+          .eq('user_wallet', wallet)
+          .eq('source_id', firstStepsQuest.id)
+          .eq('source_type', 'quest')
+          .single()
+        
+        if (!existingReward) {
+          await supabase
+            .from('user_rewards')
+            .insert({
+              user_wallet: wallet,
+              reward_type: 'quest',
+              amount: firstStepsQuest.reward_amount,
+              source_id: firstStepsQuest.id,
+              source_type: 'quest',
+              description: `Completed quest: ${firstStepsQuest.title}`,
+              claimed: false,
+            })
+        }
+        
+        // Reload user quests after auto-complete
+        const { data: updatedUserQuests } = await supabase
+          .from('user_quests')
+          .select('*')
+          .eq('user_wallet', wallet)
+        
+        if (updatedUserQuests) {
+          userQuests = updatedUserQuests
+        }
+      }
+    }
 
     // Merge quest data with user progress
     const questsWithProgress = quests?.map(quest => {
       const userQuest = userQuests?.find(uq => uq.quest_id === quest.id)
+      
       return {
         ...quest,
         userProgress: userQuest?.progress || {},
@@ -67,8 +134,6 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-
-    const supabase = createClient()
 
     // Check if quest exists and is active
     const { data: quest, error: questError } = await supabase

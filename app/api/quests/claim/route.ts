@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
+import { mintFanfiReward } from '@/lib/blockchain/mint-rewards'
 
-// POST /api/quests/claim - Claim quest rewards
+// POST /api/quests/claim - Claim quest rewards (ON-CHAIN)
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -13,8 +14,6 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
-
-    const supabase = createClient()
 
     // Verify quest is completed but not claimed
     const { data: userQuest, error: questError } = await supabase
@@ -33,6 +32,30 @@ export async function POST(request: Request) {
       )
     }
 
+    const rewardAmount = userQuest.quests.reward_amount
+    const questTitle = userQuest.quests.title
+
+    // ===== MINT TOKENS ON-CHAIN =====
+    console.log(`🪙 Minting ${rewardAmount} FANFI to ${wallet} for quest: ${questTitle}`)
+    
+    const mintResult = await mintFanfiReward(
+      wallet,
+      rewardAmount,
+      `Quest Reward: ${questTitle}`
+    )
+
+    if (!mintResult.success) {
+      console.error('Failed to mint tokens:', mintResult.error)
+      
+      // If minting fails but it's because of missing config, continue (dev mode)
+      if (!mintResult.error?.includes('not configured')) {
+        return NextResponse.json(
+          { error: `Failed to mint tokens: ${mintResult.error}` },
+          { status: 500 }
+        )
+      }
+    }
+
     // Mark reward as claimed in user_quests
     const { error: updateError } = await supabase
       .from('user_quests')
@@ -48,20 +71,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to claim reward' }, { status: 500 })
     }
 
-    // Update user's total tokens
-    const { error: userUpdateError } = await supabase
+    // Update user's total tokens in database (for tracking)
+    const { data: currentUser } = await supabase
       .from('users')
-      .update({
-        total_tokens: supabase.rpc('increment', { x: userQuest.quests.reward_amount }),
-      })
+      .select('total_tokens')
       .eq('wallet_address', wallet)
+      .single()
 
-    if (userUpdateError) {
-      console.error('Error updating user tokens:', userUpdateError)
+    if (currentUser) {
+      await supabase
+        .from('users')
+        .update({
+          total_tokens: (currentUser.total_tokens || 0) + rewardAmount,
+        })
+        .eq('wallet_address', wallet)
     }
 
     // Update reward entry
-    const { error: rewardUpdateError } = await supabase
+    await supabase
       .from('user_rewards')
       .update({
         claimed: true,
@@ -71,14 +98,12 @@ export async function POST(request: Request) {
       .eq('source_id', questId)
       .eq('source_type', 'quest')
 
-    if (rewardUpdateError) {
-      console.error('Error updating reward entry:', rewardUpdateError)
-    }
-
     return NextResponse.json({
       success: true,
-      reward: userQuest.quests.reward_amount,
-      message: `Claimed ${userQuest.quests.reward_amount} FANFI tokens!`,
+      reward: rewardAmount,
+      txHash: mintResult.txHash,
+      message: `Claimed ${rewardAmount} FANFI tokens!`,
+      onChain: !!mintResult.txHash && !mintResult.error?.includes('not configured'),
     })
   } catch (error) {
     console.error('Error in POST /api/quests/claim:', error)

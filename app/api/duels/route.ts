@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/client'
+import { supabase } from '@/lib/supabase/client'
+
+// Note: Duels now work with on-chain token balances
+// Database token tracking has been removed in favor of blockchain verification
 
 // GET /api/duels - Fetch available duels
 export async function GET(request: Request) {
@@ -8,7 +11,6 @@ export async function GET(request: Request) {
     const wallet = searchParams.get('wallet')
     const status = searchParams.get('status') || 'open'
     
-    const supabase = createClient()
 
     let query = supabase
       .from('duels')
@@ -50,31 +52,13 @@ export async function POST(request: Request) {
       )
     }
 
-    const supabase = createClient()
+    // Note: Token staking is tracked on-chain, not in database
+    // Users should have FANFI tokens in their wallet to participate
+    // The actual token locking happens through smart contracts
+    // For now, duels are created without upfront token deduction
+    // Tokens will be handled by duel smart contract when deployed
 
-    // Verify user has enough tokens
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('total_tokens')
-      .eq('wallet_address', wallet)
-      .single()
-
-    if (userError || !user || user.total_tokens < stakeAmount) {
-      return NextResponse.json(
-        { error: 'Insufficient tokens' },
-        { status: 400 }
-      )
-    }
-
-    // Deduct stake from creator's balance
-    await supabase
-      .from('users')
-      .update({
-        total_tokens: user.total_tokens - stakeAmount,
-      })
-      .eq('wallet_address', wallet)
-
-    // Create duel
+    // Create duel (only insert columns that exist in schema)
     const { data: duel, error: createError } = await supabase
       .from('duels')
       .insert({
@@ -83,9 +67,8 @@ export async function POST(request: Request) {
         opponent_wallet: opponentWallet || null,
         status: 'open',
         stake_amount: stakeAmount,
-        total_pot: stakeAmount, // Will double when opponent joins
         challenge_data: challengeData,
-        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+        // Note: total_pot and expires_at columns don't exist in current schema
       })
       .select()
       .single()
@@ -96,6 +79,37 @@ export async function POST(request: Request) {
         { error: 'Failed to create duel' },
         { status: 500 }
       )
+    }
+
+    // ===== AUTO-COMPLETE DUEL CREATION QUESTS =====
+    const { data: duelQuests } = await supabase
+      .from('quests')
+      .select('id, title, requirements')
+      .eq('category', 'engage')
+      .eq('active', true)
+      .ilike('title', '%duel%')
+
+    if (duelQuests && duelQuests.length > 0) {
+      for (const quest of duelQuests) {
+        const { data: userQuest } = await supabase
+          .from('user_quests')
+          .select('*')
+          .eq('user_wallet', wallet)
+          .eq('quest_id', quest.id)
+          .single()
+
+        if (!userQuest) {
+          await supabase
+            .from('user_quests')
+            .insert({
+              user_wallet: wallet,
+              quest_id: quest.id,
+              progress: { duels_created: 1 },
+              completed: true,
+              completed_at: new Date().toISOString(),
+            })
+        }
+      }
     }
 
     return NextResponse.json({
@@ -122,8 +136,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    const supabase = createClient()
-
     // Fetch duel
     const { data: duel, error: duelError } = await supabase
       .from('duels')
@@ -145,24 +157,10 @@ export async function PUT(request: Request) {
         return NextResponse.json({ error: 'Cannot join your own duel' }, { status: 400 })
       }
 
-      // Verify user has enough tokens
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('total_tokens')
-        .eq('wallet_address', wallet)
-        .single()
-
-      if (userError || !user || user.total_tokens < duel.stake_amount) {
-        return NextResponse.json({ error: 'Insufficient tokens' }, { status: 400 })
-      }
-
-      // Deduct stake from opponent's balance
-      await supabase
-        .from('users')
-        .update({
-          total_tokens: user.total_tokens - duel.stake_amount,
-        })
-        .eq('wallet_address', wallet)
+      // Note: Token staking is tracked on-chain, not in database
+      // Users should have FANFI tokens in their wallet to join
+      // The actual token locking happens through smart contracts
+      // For now, duels can be joined without upfront token deduction
 
       // Update duel
       const { data: updatedDuel, error: updateError } = await supabase
@@ -170,7 +168,8 @@ export async function PUT(request: Request) {
         .update({
           opponent_wallet: wallet,
           status: 'active',
-          total_pot: duel.stake_amount * 2,
+          started_at: new Date().toISOString(),
+          // Note: total_pot calculated as stake_amount * 2 (not stored in DB)
         })
         .eq('id', duelId)
         .select()
@@ -179,6 +178,37 @@ export async function PUT(request: Request) {
       if (updateError) {
         console.error('Error joining duel:', updateError)
         return NextResponse.json({ error: 'Failed to join duel' }, { status: 500 })
+      }
+
+      // ===== AUTO-COMPLETE DUEL JOIN QUESTS =====
+      const { data: joinQuests } = await supabase
+        .from('quests')
+        .select('id, title')
+        .eq('category', 'engage')
+        .eq('active', true)
+        .or('title.ilike.%join%duel%,title.ilike.%participate%')
+
+      if (joinQuests && joinQuests.length > 0) {
+        for (const quest of joinQuests) {
+          const { data: userQuest } = await supabase
+            .from('user_quests')
+            .select('*')
+            .eq('user_wallet', wallet)
+            .eq('quest_id', quest.id)
+            .single()
+
+          if (!userQuest) {
+            await supabase
+              .from('user_quests')
+              .insert({
+                user_wallet: wallet,
+                quest_id: quest.id,
+                progress: { duels_joined: 1 },
+                completed: true,
+                completed_at: new Date().toISOString(),
+              })
+          }
+        }
       }
 
       return NextResponse.json({
@@ -235,43 +265,31 @@ export async function PUT(request: Request) {
           })
           .eq('id', duelId)
 
-        // Award winnings to winner
+        // Award winnings to winner (on-chain)
+        const totalPot = updatedDuel.stake_amount * 2
+        
         if (winner) {
-          const { data: winnerUser } = await supabase
-            .from('users')
-            .select('total_tokens')
-            .eq('wallet_address', winner)
-            .single()
-
-          if (winnerUser) {
-            await supabase
-              .from('users')
-              .update({
-                total_tokens: winnerUser.total_tokens + updatedDuel.total_pot,
-              })
-              .eq('wallet_address', winner)
-
-            // Create reward entry
-            await supabase
-              .from('user_rewards')
-              .insert({
-                user_wallet: winner,
-                reward_type: 'duel',
-                amount: updatedDuel.total_pot,
-                source_id: duelId,
-                source_type: 'duel',
-                description: `Won duel: ${updatedDuel.duel_type}`,
-                claimed: true,
-                claimed_at: new Date().toISOString(),
-              })
-          }
+          // TODO: Mint tokens on-chain when duel contract is deployed
+          // For now, create reward entry for tracking
+          await supabase
+            .from('user_rewards')
+            .insert({
+              user_wallet: winner,
+              reward_type: 'duel',
+              amount: totalPot,
+              source_id: duelId,
+              source_type: 'duel',
+              description: `Won duel: ${updatedDuel.duel_type}`,
+              claimed: false, // Will be claimed via on-chain minting later
+              claimed_at: null,
+            })
         }
 
         return NextResponse.json({
           success: true,
-          message: winner === wallet ? `You won ${updatedDuel.total_pot} tokens!` : 'Duel completed',
+          message: winner === wallet ? `You won ${totalPot} tokens!` : 'Duel completed',
           winner,
-          pot: updatedDuel.total_pot,
+          pot: totalPot,
         })
       }
 
