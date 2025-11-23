@@ -1,112 +1,129 @@
 "use client"
 
-import { Wallet, Shield, Check } from "lucide-react"
-import { useState } from "react"
+import { Wallet, Shield, Zap } from "lucide-react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useAccount } from "wagmi"
+import { ConnectButton } from "@rainbow-me/rainbowkit"
 
 export default function ConnectWalletPage() {
-  const [selectedWallet, setSelectedWallet] = useState<string | null>(null)
   const router = useRouter()
+  const { address, isConnected } = useAccount()
 
-  const handleConnect = (walletType: string) => {
-    setSelectedWallet(walletType)
-    // Simulate wallet connection delay
-    setTimeout(() => {
-      router.push("/reward/claimed")
-    }, 500)
-  }
+  useEffect(() => {
+    if (isConnected && address) {
+      // Redirect to verification after wallet connection
+      router.push('/verify-self')
+    }
+  }, [isConnected, address, router])
 
   return (
-    <main className="min-h-screen bg-white flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Wallet Icon */}
-        <div className="flex justify-center mb-8">
-          <div className="w-32 h-32 bg-[#CE1141] rounded-3xl flex items-center justify-center">
-            <Wallet className="w-16 h-16 text-white" strokeWidth={2.5} />
-          </div>
+    <main className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-12">
+      <section className="flex flex-col items-center text-center space-y-8 max-w-md">
+        <div className="w-24 h-24 bg-gradient-to-br from-[#0033A0] to-[#CE1141] rounded-3xl flex items-center justify-center">
+          <Wallet className="w-12 h-12 text-white" strokeWidth={2} />
         </div>
-
-        {/* Heading */}
-        <h1 className="text-[#121212] text-3xl md:text-4xl font-bold text-center mb-4">Connect Your Wallet</h1>
-
-        {/* Subtitle */}
-        <p className="text-[#6E6E6E] text-center text-lg mb-12">Connect your wallet to redeem your reward</p>
 
         <div className="space-y-4">
-          {/* WalletConnect Option */}
-          <button
-            onClick={() => handleConnect("walletconnect")}
-            className={`w-full bg-[#F8F8F8] hover:bg-[#F0F0F0] rounded-2xl p-6 transition-colors shadow-[0_2px_6px_rgba(0,0,0,0.06)] ${
-              selectedWallet === "walletconnect" ? "border-2 border-[#CE1141]" : "border border-[#E4E4E4]"
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-[#3B99FC] rounded-2xl flex items-center justify-center flex-shrink-0">
-                <Wallet className="w-8 h-8 text-white" strokeWidth={2.5} />
-              </div>
-              <div className="text-left flex-1">
-                <h2 className="text-[#121212] text-xl font-bold mb-1">WalletConnect</h2>
-                <p className="text-[#6E6E6E]">Connect with your mobile wallet</p>
-              </div>
-              {selectedWallet === "walletconnect" && (
-                <Check className="w-6 h-6 text-[#CE1141] flex-shrink-0" strokeWidth={3} />
-              )}
-            </div>
-          </button>
-
-          {/* Social Login Wallet Option */}
-          <button
-            onClick={() => handleConnect("social")}
-            className={`w-full bg-[#F8F8F8] hover:bg-[#F0F0F0] rounded-2xl p-6 transition-colors shadow-[0_2px_6px_rgba(0,0,0,0.06)] ${
-              selectedWallet === "social" ? "border-2 border-[#CE1141]" : "border border-[#E4E4E4]"
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-[#F7D020] rounded-2xl flex items-center justify-center flex-shrink-0">
-                <Shield className="w-8 h-8 text-[#121212]" strokeWidth={2.5} />
-              </div>
-              <div className="text-left flex-1">
-                <h2 className="text-[#121212] text-xl font-bold mb-1">Social Login Wallet</h2>
-                <p className="text-[#6E6E6E]">Use email or social account</p>
-              </div>
-              {selectedWallet === "social" && (
-                <Check className="w-6 h-6 text-[#CE1141] flex-shrink-0" strokeWidth={3} />
-              )}
-            </div>
-          </button>
-
-          {/* Chiliz Mainnet Option */}
-          <button
-            onClick={() => handleConnect("chiliz")}
-            className={`w-full bg-[#F8F8F8] hover:bg-[#F0F0F0] rounded-2xl p-6 transition-colors shadow-[0_2px_6px_rgba(0,0,0,0.06)] ${
-              selectedWallet === "chiliz" ? "border-2 border-[#CE1141]" : "border border-[#E4E4E4]"
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-[#CE1141] rounded-2xl flex items-center justify-center flex-shrink-0">
-                <Check className="w-10 h-10 text-white" strokeWidth={3} />
-              </div>
-              <div className="text-left flex-1">
-                <h2 className="text-[#121212] text-xl font-bold mb-1">Chiliz Mainnet</h2>
-                <p className="text-[#6E6E6E]">Connected to Chiliz network</p>
-              </div>
-              {selectedWallet === "chiliz" && (
-                <Check className="w-6 h-6 text-[#CE1141] flex-shrink-0" strokeWidth={3} />
-              )}
-            </div>
-          </button>
+          <h1 className="text-4xl md:text-5xl font-bold text-[#121212] text-balance">
+            Connect Your Wallet
+          </h1>
+          <p className="text-xl text-[#6E6E6E] font-normal text-balance">
+            Start earning Fan Tokens on Chiliz Chain
+          </p>
         </div>
 
-        {/* Security Info */}
-        <div className="mt-8 bg-[#F0FDF4] border border-[#86EFAC] rounded-2xl p-6">
-          <div className="flex items-start gap-4">
-            <Shield className="w-6 h-6 text-[#16A34A] flex-shrink-0 mt-1" strokeWidth={2} />
-            <p className="text-[#121212] leading-relaxed">
-              Transactions are verified with Self identity for maximum security
+        {/* Connect Button */}
+        <div className="w-full">
+          <ConnectButton.Custom>
+            {({
+              account,
+              chain,
+              openAccountModal,
+              openChainModal,
+              openConnectModal,
+              mounted,
+            }) => {
+              const ready = mounted
+              const connected = ready && account && chain
+
+              return (
+                <div
+                  {...(!ready && {
+                    'aria-hidden': true,
+                    style: {
+                      opacity: 0,
+                      pointerEvents: 'none',
+                      userSelect: 'none',
+                    },
+                  })}
+                >
+                  {(() => {
+                    if (!connected) {
+                      return (
+          <button
+                          onClick={openConnectModal}
+                          className="w-full bg-[#CE1141] hover:bg-[#B50E36] transition-colors text-white text-lg font-semibold py-4 rounded-2xl shadow-md"
+                        >
+                          Connect Wallet
+          </button>
+                      )
+                    }
+
+                    return (
+                      <div className="flex flex-col gap-3">
+                        <button
+                          onClick={openChainModal}
+                          className="w-full bg-[#F8F8F8] border border-[#E4E4E4] text-[#121212] text-sm font-semibold py-3 rounded-xl"
+                        >
+                          {chain.name}
+                        </button>
+          <button
+                          onClick={openAccountModal}
+                          className="w-full bg-[#CE1141] text-white text-sm font-semibold py-3 rounded-xl"
+                        >
+                          {account.displayName}
+                        </button>
+                      </div>
+                    )
+                  })()}
+              </div>
+              )
+            }}
+          </ConnectButton.Custom>
+              </div>
+
+        {/* Features */}
+        <div className="w-full space-y-4 mt-8">
+          <div className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-xl p-4 flex items-start gap-3">
+            <div className="w-10 h-10 bg-[#CE1141] rounded-full flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-white" strokeWidth={2} />
+            </div>
+            <div className="text-left">
+              <h3 className="text-[#121212] font-semibold mb-1">Secure & Private</h3>
+              <p className="text-[#6E6E6E] text-sm">
+                Your wallet, your keys. We never access your funds.
+              </p>
+            </div>
+        </div>
+
+          <div className="bg-[#F8F8F8] border border-[#E4E4E4] rounded-xl p-4 flex items-start gap-3">
+            <div className="w-10 h-10 bg-[#0033A0] rounded-full flex items-center justify-center flex-shrink-0">
+              <Zap className="w-5 h-5 text-white" strokeWidth={2} />
+            </div>
+            <div className="text-left">
+              <h3 className="text-[#121212] font-semibold mb-1">Built on Chiliz</h3>
+              <p className="text-[#6E6E6E] text-sm">
+                The leading blockchain for sports & entertainment.
             </p>
           </div>
         </div>
       </div>
+
+        <p className="text-sm text-[#A0A0A0] mt-4">
+          By connecting, you agree to our Terms of Service
+        </p>
+      </section>
     </main>
   )
 }

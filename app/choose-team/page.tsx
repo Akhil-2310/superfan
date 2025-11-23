@@ -6,45 +6,35 @@ import { useState } from "react"
 const teams = [
   {
     id: 1,
-    abbreviation: "AR",
     name: "Argentina",
     nickname: "La Albiceleste",
     country: "Argentina",
+    flag: "🇦🇷",
+    colors: "from-[#75AADB] to-[#FFFFFF]",
   },
   {
     id: 2,
-    abbreviation: "FR",
     name: "France",
     nickname: "Les Bleus",
     country: "France",
+    flag: "🇫🇷",
+    colors: "from-[#002395] to-[#ED2939]",
   },
   {
     id: 3,
-    abbreviation: "ES",
-    name: "Spain",
-    nickname: "La Roja",
-    country: "Spain",
-  },
-  {
-    id: 4,
-    abbreviation: "IT",
-    name: "Italy",
-    nickname: "Gli Azzurri",
-    country: "Italy",
-  },
-  {
-    id: 5,
-    abbreviation: "EN",
-    name: "England",
-    nickname: "The Three Lions",
-    country: "England",
-  },
-  {
-    id: 6,
-    abbreviation: "DE",
     name: "Germany",
     nickname: "Die Mannschaft",
     country: "Germany",
+    flag: "🇩🇪",
+    colors: "from-[#000000] to-[#DD0000]",
+  },
+  {
+    id: 4,
+    name: "Italy",
+    nickname: "Gli Azzurri",
+    country: "Italy",
+    flag: "🇮🇹",
+    colors: "from-[#009246] via-[#FFFFFF] to-[#CE2B37]",
   },
 ]
 
@@ -109,9 +99,9 @@ export default function ChooseTeamPage() {
                 </div>
               )}
 
-              {/* Team Logo Circle */}
-              <div className="w-20 h-20 md:w-24 md:h-24 bg-[#E4E4E4] rounded-full flex items-center justify-center mb-4">
-                <span className="text-2xl md:text-3xl font-bold text-[#6E6E6E]">{team.abbreviation}</span>
+              {/* Team Logo Circle with Flag */}
+              <div className={`w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br ${team.colors} rounded-full flex items-center justify-center mb-4 shadow-lg border-4 border-white`}>
+                <span className="text-4xl md:text-5xl">{team.flag}</span>
               </div>
 
               {/* Team Info */}
