@@ -24,7 +24,7 @@ export default function Page() {
 
         <div className="space-y-4">
           <h1 className="text-4xl md:text-5xl font-bold text-[#121212] text-balance">Welcome Superfan!</h1>
-          <p className="text-xl md:text-2xl text-[#6E6E6E] font-normal text-balance">Earn and stake Fan Tokens™</p>
+          <p className="text-xl md:text-2xl text-[#6E6E6E] font-normal text-balance">Real Fans. Real Rewards.</p>
         </div>
 
         <div className="flex flex-col items-center space-y-4 w-full mt-8">
