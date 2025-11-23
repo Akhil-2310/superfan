@@ -81,55 +81,96 @@ export async function POST(request: Request) {
       predictedWinner,
       confidence,
       stakeAmount,
+      homeTeam,
+      awayTeam,
+      matchDate,
+      competition,
     } = body
 
-    if (!wallet || !matchId || !predictedWinner) {
+    if (!wallet || !matchId || !predictedWinner || !stakeAmount) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Check if user already predicted for this match
-    const { data: existing } = await supabase
+    // First, ensure the match exists in match_predictions table (or create it)
+    let matchPrediction = null
+    const { data: existingMatch } = await supabase
       .from('match_predictions')
       .select('*')
-      .eq('user_wallet', wallet)
       .eq('match_id', matchId)
       .single()
 
-    if (existing) {
+    if (existingMatch) {
+      matchPrediction = existingMatch
+    } else {
+      // Create match prediction entry
+      const bettingClosesAt = new Date(matchDate || Date.now())
+      bettingClosesAt.setHours(bettingClosesAt.getHours() - 1) // Close betting 1 hour before match
+
+      const { data: newMatch, error: matchError } = await supabase
+        .from('match_predictions')
+        .insert({
+          match_id: matchId,
+          home_team: homeTeam || 'Team A',
+          away_team: awayTeam || 'Team B',
+          match_date: matchDate || new Date().toISOString(),
+          betting_closes_at: bettingClosesAt.toISOString(),
+          finalized: false,
+        })
+        .select()
+        .single()
+
+      if (matchError) {
+        console.error('Error creating match prediction:', matchError)
+        return NextResponse.json(
+          { error: 'Failed to create match' },
+          { status: 500 }
+        )
+      }
+      matchPrediction = newMatch
+    }
+
+    // Check if user already predicted for this match
+    const { data: existingUserPrediction } = await supabase
+      .from('user_predictions')
+      .select('*')
+      .eq('user_wallet', wallet)
+      .eq('prediction_id', matchPrediction.id)
+      .single()
+
+    if (existingUserPrediction) {
       return NextResponse.json(
         { error: 'Already predicted for this match' },
         { status: 400 }
       )
     }
 
-    // Note: Token staking is tracked on-chain, not in database
-    // Users should have FANFI tokens in their wallet to stake
-    // The actual token locking happens through smart contracts
-    // For now, predictions can be made without upfront token deduction
+    // Normalize predicted winner to 'home', 'away', or 'draw'
+    let normalizedWinner = 'home'
+    if (predictedWinner.toLowerCase() === homeTeam?.toLowerCase()) {
+      normalizedWinner = 'home'
+    } else if (predictedWinner.toLowerCase() === awayTeam?.toLowerCase()) {
+      normalizedWinner = 'away'
+    } else if (predictedWinner === 'home' || predictedWinner === 'away' || predictedWinner === 'draw') {
+      normalizedWinner = predictedWinner
+    }
 
-    // Calculate potential reward based on confidence
-    const potentialReward = Math.floor(stakeAmount * (confidence / 50))
-
-    // Create prediction
+    // Create user prediction
     const { data: userPrediction, error: createError } = await supabase
-      .from('match_predictions')
+      .from('user_predictions')
       .insert({
         user_wallet: wallet,
-        match_id: matchId,
-        predicted_winner: predictedWinner,
-        confidence,
-        stake_amount: stakeAmount || 50,
-        potential_reward: potentialReward,
-        status: 'pending',
+        prediction_id: matchPrediction.id,
+        predicted_winner: normalizedWinner,
+        stake_amount: stakeAmount,
       })
       .select()
       .single()
 
     if (createError) {
-      console.error('Error creating prediction:', createError)
+      console.error('Error creating user prediction:', createError)
       return NextResponse.json(
         { error: 'Failed to create prediction' },
         { status: 500 }

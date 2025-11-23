@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAccount } from "wagmi"
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi"
 import { useRouter } from "next/navigation"
+import { parseEther, keccak256, toBytes, formatEther } from "viem"
 import {
   Home,
   Zap,
@@ -23,6 +24,12 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase/client"
+import { fetchUpcomingMatches, UpcomingMatch } from "@/lib/api/fetch-matches"
+import { PREDICTION_MARKET_ABI } from "@/lib/contracts/prediction-market-abi"
+import { erc20Abi } from "viem"
+
+const PREDICTION_MARKET_ADDRESS = process.env.NEXT_PUBLIC_PREDICTION_MARKET_ADDRESS as `0x${string}`
+const FANFI_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_FANFI_TOKEN as `0x${string}`
 
 interface Match {
   id: string
@@ -31,8 +38,6 @@ interface Match {
   match_date: string
   league: string
   status: 'upcoming' | 'live' | 'finished'
-  home_score?: number
-  away_score?: number
 }
 
 interface Prediction {
@@ -50,7 +55,7 @@ export default function PredictionsPage() {
   const { address, isConnected } = useAccount()
   const router = useRouter()
   
-  const [matches, setMatches] = useState<Match[]>([])
+  const [matches, setMatches] = useState<UpcomingMatch[]>([])
   const [myPredictions, setMyPredictions] = useState<Prediction[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState<string | null>(null)
@@ -71,47 +76,9 @@ export default function PredictionsPage() {
   const loadMatches = async () => {
     setLoading(true)
     try {
-      // Fetch real upcoming matches from database
-      const { data, error: fetchError } = await supabase
-        .from('match_predictions')
-        .select('match_id, match_home_team, match_away_team, match_date')
-        .gte('match_date', new Date().toISOString())
-        .order('match_date', { ascending: true })
-        .limit(10)
-      
-      if (fetchError) {
-        // If no matches in DB, fetch from API
-        const response = await fetch(`/api/matches?country=global&limit=5`)
-        const apiData = await response.json()
-        
-        if (apiData.matches && apiData.matches.length > 0) {
-          const formattedMatches = apiData.matches.map((m: any) => ({
-            id: m.id || m.idEvent,
-            home_team: m.homeTeam || m.strHomeTeam,
-            away_team: m.awayTeam || m.strAwayTeam,
-            match_date: m.date || m.dateEvent,
-            league: m.league || m.strLeague || 'Football',
-            status: 'upcoming' as const,
-          }))
-          setMatches(formattedMatches)
-        }
-      } else if (data && data.length > 0) {
-        // Use existing matches from predictions table
-        const uniqueMatches = Array.from(
-          new Map(data.map(item => [
-            item.match_id,
-            {
-              id: item.match_id,
-              home_team: item.match_home_team,
-              away_team: item.match_away_team,
-              match_date: item.match_date,
-              league: 'Football',
-              status: 'upcoming' as const,
-            }
-          ])).values()
-        )
-        setMatches(uniqueMatches as Match[])
-      }
+      // Fetch the same real matches as the dashboard
+      const upcomingMatches = await fetchUpcomingMatches()
+      setMatches(upcomingMatches)
     } catch (err) {
       console.error('Error loading matches:', err)
       setError('Failed to load matches')
@@ -125,55 +92,72 @@ export default function PredictionsPage() {
     
     try {
       const { data, error: fetchError } = await supabase
-        .from('match_predictions')
-        .select('*')
+        .from('user_predictions')
+        .select(`
+          *,
+          match_predictions:prediction_id (
+            match_id,
+            home_team,
+            away_team,
+            match_date
+          )
+        `)
         .eq('user_wallet', address)
         .order('created_at', { ascending: false })
         .limit(20)
       
       if (!fetchError && data) {
-        setMyPredictions(data)
+        // Transform the data to match the Prediction interface
+        const transformedData = data.map((pred: any) => ({
+          id: pred.id,
+          match_id: pred.match_predictions?.match_id || pred.prediction_id,
+          user_wallet: pred.user_wallet,
+          predicted_winner: pred.predicted_winner,
+          confidence: 70, // Default confidence
+          stake_amount: pred.stake_amount,
+          created_at: pred.created_at,
+          match: {
+            id: pred.match_predictions?.match_id || pred.prediction_id,
+            home_team: pred.match_predictions?.home_team || 'Unknown',
+            away_team: pred.match_predictions?.away_team || 'Unknown',
+            match_date: pred.match_predictions?.match_date || new Date().toISOString(),
+            league: 'Football',
+            status: 'upcoming' as const,
+          }
+        }))
+        setMyPredictions(transformedData)
       }
     } catch (err) {
       console.error('Error loading predictions:', err)
     }
   }
 
-  const handlePrediction = async (matchId: string, winner: string, confidence: number, stakeAmount: number) => {
-    if (!address) return
+  const handlePrediction = async (
+    matchId: string, 
+    winner: string, 
+    confidence: number, 
+    stakeAmount: number,
+    homeTeam: string,
+    awayTeam: string,
+    matchDate: string,
+    competition: string
+  ) => {
+    if (!address) {
+      setError('Please connect your wallet first')
+      return
+    }
     
     setSubmitting(matchId)
     setError(null)
     setSuccess(null)
     
     try {
-      const response = await fetch('/api/predictions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet: address,
-          matchId,
-          predictedWinner: winner,
-          confidence,
-          stakeAmount,
-        }),
-      })
-      
-      const data = await response.json()
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit prediction')
-      }
-      
-      setSuccess('Prediction submitted successfully!')
-      loadMyPredictions()
-      
-      // Auto-dismiss success message
-      setTimeout(() => setSuccess(null), 3000)
+      // This will be handled by the MatchPredictionCard component
+      // which has access to writeContract hooks
+      setSuccess('Preparing transaction...')
     } catch (err: any) {
       console.error('Prediction error:', err)
       setError(err.message || 'Failed to submit prediction')
-    } finally {
       setSubmitting(null)
     }
   }
@@ -336,6 +320,12 @@ export default function PredictionsPage() {
                 ) : (
                   myPredictions.map((prediction) => {
                     const status = getPredictionStatus(prediction)
+                    const displayWinner = prediction.predicted_winner === 'home' 
+                      ? prediction.match?.home_team 
+                      : prediction.predicted_winner === 'away' 
+                        ? prediction.match?.away_team 
+                        : prediction.predicted_winner
+                    
                     return (
                       <div
                         key={prediction.id}
@@ -347,7 +337,9 @@ export default function PredictionsPage() {
                               <Target className="w-6 h-6 text-white" />
                             </div>
                             <div>
-                              <h3 className="font-bold text-[#141414]">Match #{prediction.match_id}</h3>
+                              <h3 className="font-bold text-[#141414]">
+                                {prediction.match?.home_team} vs {prediction.match?.away_team}
+                              </h3>
                               <p className="text-sm text-[#6E6E6E]">
                                 {new Date(prediction.created_at).toLocaleDateString()}
                               </p>
@@ -360,21 +352,23 @@ export default function PredictionsPage() {
                         
                         <div className="grid grid-cols-2 gap-4 mt-4">
                           <div>
-                            <p className="text-xs text-[#6E6E6E] mb-1">Predicted Winner</p>
-                            <p className="font-bold text-[#141414]">{prediction.predicted_winner}</p>
+                            <p className="text-xs text-[#6E6E6E] mb-1">Your Prediction</p>
+                            <p className="font-bold text-[#D500F9]">{displayWinner}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-[#6E6E6E] mb-1">Confidence</p>
-                            <p className="font-bold text-[#141414]">{prediction.confidence}%</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-[#6E6E6E] mb-1">Stake</p>
+                            <p className="text-xs text-[#6E6E6E] mb-1">Bet Amount</p>
                             <p className="font-bold text-[#141414]">{prediction.stake_amount} FANFI</p>
                           </div>
                           <div>
-                            <p className="text-xs text-[#6E6E6E] mb-1">Potential Reward</p>
+                            <p className="text-xs text-[#6E6E6E] mb-1">Potential Win</p>
                             <p className="font-bold text-green-600">
-                              {(prediction.stake_amount * (prediction.confidence / 50)).toFixed(0)} FANFI
+                              {(prediction.stake_amount * 1.8).toFixed(0)} FANFI
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-[#6E6E6E] mb-1">Profit</p>
+                            <p className="font-bold text-green-600">
+                              +{(prediction.stake_amount * 0.8).toFixed(0)} FANFI
                             </p>
                           </div>
                         </div>
@@ -436,143 +430,289 @@ function MatchPredictionCard({
   isSubmitting,
   disabled,
 }: {
-  match: Match
-  onPredict: (matchId: string, winner: string, confidence: number, stakeAmount: number) => void
+  match: UpcomingMatch
+  onPredict: (
+    matchId: string, 
+    winner: string, 
+    confidence: number, 
+    stakeAmount: number,
+    homeTeam: string,
+    awayTeam: string,
+    matchDate: string,
+    competition: string
+  ) => void
   isSubmitting: boolean
   disabled: boolean
 }) {
+  const { address } = useAccount()
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null)
-  const [confidence, setConfidence] = useState(70)
-  const [stakeAmount, setStakeAmount] = useState(50)
-  const [showForm, setShowForm] = useState(false)
+  const [stakeAmount, setStakeAmount] = useState(10)
+  const [isApproving, setIsApproving] = useState(false)
+  const [isPredicting, setIsPredicting] = useState(false)
+  const [txStatus, setTxStatus] = useState<string>('')
+  const [matchIdHash, setMatchIdHash] = useState<`0x${string}` | null>(null)
 
-  const handleSubmit = () => {
-    if (!selectedWinner) return
-    onPredict(match.id, selectedWinner, confidence, stakeAmount)
-    setShowForm(false)
-    setSelectedWinner(null)
+  const { writeContract: approveTokens, data: approveHash } = useWriteContract()
+  const { writeContract: placePrediction, data: predictHash } = useWriteContract()
+
+  const { isLoading: isApproveConfirming } = useWaitForTransactionReceipt({
+    hash: approveHash,
+  })
+
+  const { isLoading: isPredictConfirming } = useWaitForTransactionReceipt({
+    hash: predictHash,
+  })
+
+  const handleSubmit = async () => {
+    if (!selectedWinner || !address) return
+    
+    try {
+      // Step 0: Ensure match exists on-chain
+      setTxStatus('Creating match on-chain...')
+      
+      const now = Math.floor(Date.now() / 1000)
+      const lockTime = now + 3600 // Lock in 1 hour
+      const matchTime = now + 7200 // Match in 2 hours
+
+      const createMatchRes = await fetch('/api/predictions/create-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matchId: match.id,
+          lockTime,
+          matchTime
+        })
+      })
+
+      if (!createMatchRes.ok) {
+        throw new Error('Failed to create match on-chain')
+      }
+
+      const createMatchData = await createMatchRes.json()
+      setMatchIdHash(createMatchData.matchIdHash || keccak256(toBytes(match.id + matchTime.toString())))
+
+      setIsApproving(true)
+      setTxStatus('Approving FANFI tokens...')
+
+      // Step 1: Approve FANFI tokens
+      await approveTokens({
+        address: FANFI_TOKEN_ADDRESS,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [PREDICTION_MARKET_ADDRESS, parseEther(stakeAmount.toString())]
+      })
+
+      // Wait for approval confirmation
+      setTxStatus('Waiting for approval...')
+      // The useWaitForTransactionReceipt hook will handle this
+      
+    } catch (err: any) {
+      console.error('Approval error:', err)
+      setTxStatus('')
+      setIsApproving(false)
+      alert('Failed to approve tokens: ' + err.message)
+    }
   }
 
-  const potentialReward = stakeAmount * (confidence / 50)
+  // After approval is confirmed, place prediction
+  useEffect(() => {
+    if (approveHash && !isApproveConfirming && isApproving) {
+      placePredictionOnChain()
+    }
+  }, [approveHash, isApproveConfirming])
+
+  const placePredictionOnChain = async () => {
+    if (!selectedWinner || !address || !matchIdHash) return
+
+    try {
+      setIsApproving(false)
+      setIsPredicting(true)
+      setTxStatus('Placing prediction on-chain...')
+
+      // Determine outcome: 1=Home, 2=Away, 3=Draw
+      let outcome = 1
+      if (selectedWinner === match.awayTeam) {
+        outcome = 2
+      } else if (selectedWinner.toLowerCase() === 'draw') {
+        outcome = 3
+      }
+
+      await placePrediction({
+        address: PREDICTION_MARKET_ADDRESS,
+        abi: PREDICTION_MARKET_ABI,
+        functionName: 'predict',
+        args: [matchIdHash, outcome, parseEther(stakeAmount.toString())]
+      })
+
+      setTxStatus('Waiting for confirmation...')
+      
+    } catch (err: any) {
+      console.error('Prediction error:', err)
+      setTxStatus('')
+      setIsPredicting(false)
+      alert('Failed to place prediction: ' + err.message)
+    }
+  }
+
+  // After prediction is confirmed
+  useEffect(() => {
+    if (predictHash && !isPredictConfirming && isPredicting) {
+      setTxStatus('Success! Prediction placed on-chain 🎯')
+      setIsPredicting(false)
+      setSelectedWinner(null)
+      setTimeout(() => setTxStatus(''), 3000)
+    }
+  }, [predictHash, isPredictConfirming])
+
+  const potentialReward = stakeAmount * 1.8 // Simple 1.8x multiplier
+  const isProcessing = isApproving || isPredicting || isApproveConfirming || isPredictConfirming
 
   return (
     <div className="bg-white border-2 border-[#E4E4E4] rounded-3xl p-6 hover:border-[#D500F9] transition-all">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] rounded-xl flex items-center justify-center">
-            <Target className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h3 className="font-bold text-[#141414]">{match.home_team} vs {match.away_team}</h3>
-            <p className="text-sm text-[#6E6E6E] flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              {new Date(match.match_date).toLocaleDateString()}
-            </p>
+      {/* Transaction Status */}
+      {txStatus && (
+        <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-[#D500F9]/10 to-[#7C4DFF]/10 border border-[#D500F9]/20">
+          <div className="flex items-center gap-2">
+            {isProcessing ? (
+              <Loader2 className="w-4 h-4 text-[#D500F9] animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+            )}
+            <span className="text-sm font-medium text-[#141414]">{txStatus}</span>
           </div>
         </div>
-        <div className="bg-[#F8F8F8] rounded-full px-3 py-1">
-          <span className="text-xs font-semibold text-[#6E6E6E]">{match.league}</span>
+      )}
+
+      {/* Match Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] rounded-lg px-3 py-1">
+              <span className="text-xs font-bold text-white">{match.competition}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-[#6E6E6E]">
+            <Calendar className="w-4 h-4" />
+            <span>{match.date} • {match.time}</span>
+          </div>
         </div>
       </div>
 
-      {!showForm ? (
+      {/* Teams */}
+      <div className="space-y-3 mb-6">
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => setSelectedWinner(match.homeTeam)}
           disabled={disabled}
-          className="w-full bg-gradient-to-r from-[#D500F9] to-[#7C4DFF] text-white font-bold py-3 rounded-2xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`w-full p-4 rounded-2xl font-semibold transition-all text-left ${
+            selectedWinner === match.homeTeam
+              ? 'bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] text-white shadow-lg scale-105'
+              : 'bg-[#F8F8F8] text-[#141414] hover:bg-[#E4E4E4] border-2 border-transparent hover:border-[#D500F9]'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          <Target className="w-5 h-5 inline mr-2" />
-          Make Prediction
-        </button>
-      ) : (
-        <div className="space-y-4 mt-4 pt-4 border-t-2 border-[#E4E4E4]">
-          <div>
-            <label className="block text-sm font-medium text-[#6E6E6E] mb-2">Pick Winner</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setSelectedWinner(match.home_team)}
-                className={`p-4 rounded-2xl font-semibold transition-all ${
-                  selectedWinner === match.home_team
-                    ? 'bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] text-white'
-                    : 'bg-[#F8F8F8] text-[#141414] hover:bg-[#E4E4E4]'
-                }`}
-              >
-                {match.home_team}
-              </button>
-              <button
-                onClick={() => setSelectedWinner(match.away_team)}
-                className={`p-4 rounded-2xl font-semibold transition-all ${
-                  selectedWinner === match.away_team
-                    ? 'bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] text-white'
-                    : 'bg-[#F8F8F8] text-[#141414] hover:bg-[#E4E4E4]'
-                }`}
-              >
-                {match.away_team}
-              </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{match.homeFlag}</span>
+              <span className="text-lg">{match.homeTeam}</span>
             </div>
+            {selectedWinner === match.homeTeam && (
+              <CheckCircle2 className="w-5 h-5" />
+            )}
           </div>
+        </button>
 
+        <div className="flex items-center justify-center py-2">
+          <span className="text-[#6E6E6E] font-bold text-sm">VS</span>
+        </div>
+
+        <button
+          onClick={() => setSelectedWinner(match.awayTeam)}
+          disabled={disabled}
+          className={`w-full p-4 rounded-2xl font-semibold transition-all text-left ${
+            selectedWinner === match.awayTeam
+              ? 'bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] text-white shadow-lg scale-105'
+              : 'bg-[#F8F8F8] text-[#141414] hover:bg-[#E4E4E4] border-2 border-transparent hover:border-[#D500F9]'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{match.awayFlag}</span>
+              <span className="text-lg">{match.awayTeam}</span>
+            </div>
+            {selectedWinner === match.awayTeam && (
+              <CheckCircle2 className="w-5 h-5" />
+            )}
+          </div>
+        </button>
+      </div>
+
+      {/* Stake Amount */}
+      {selectedWinner && (
+        <div className="space-y-4 mt-6 pt-6 border-t-2 border-[#E4E4E4]">
           <div>
             <label className="block text-sm font-medium text-[#6E6E6E] mb-2">
-              Confidence: {confidence}%
+              Bet Amount (FANFI)
             </label>
-            <input
-              type="range"
-              min="50"
-              max="99"
-              value={confidence}
-              onChange={(e) => setConfidence(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[#6E6E6E] mb-2">
-              Stake Amount (FANFI)
-            </label>
+            <div className="flex gap-2 mb-3">
+              {[10, 25, 50, 100].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => setStakeAmount(amount)}
+                  className={`flex-1 py-2 rounded-xl font-semibold text-sm transition-all ${
+                    stakeAmount === amount
+                      ? 'bg-gradient-to-br from-[#D500F9] to-[#7C4DFF] text-white'
+                      : 'bg-[#F8F8F8] text-[#6E6E6E] hover:bg-[#E4E4E4]'
+                  }`}
+                >
+                  {amount}
+                </button>
+              ))}
+            </div>
             <input
               type="number"
-              min="50"
-              max="1000"
-              step="50"
+              min="10"
+              max="500"
+              step="10"
               value={stakeAmount}
               onChange={(e) => setStakeAmount(Number(e.target.value))}
               className="w-full px-4 py-3 border-2 border-[#E4E4E4] rounded-2xl font-bold text-[#141414] focus:outline-none focus:border-[#D500F9]"
+              placeholder="Custom amount"
             />
           </div>
 
-          <div className="bg-[#F8F8F8] rounded-2xl p-4">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-[#6E6E6E]">Potential Reward:</span>
-              <span className="font-bold text-green-600">+{potentialReward.toFixed(0)} FANFI</span>
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-4 border-2 border-green-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-green-700 mb-1">Potential Win</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {potentialReward.toFixed(0)} FANFI
+                </p>
+              </div>
+              <Trophy className="w-8 h-8 text-green-500" />
+            </div>
+            <div className="mt-2 pt-2 border-t border-green-200">
+              <p className="text-xs text-green-700">
+                Profit: <span className="font-bold">+{(potentialReward - stakeAmount).toFixed(0)} FANFI</span>
+              </p>
             </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowForm(false)}
-              className="flex-1 bg-[#F8F8F8] text-[#141414] font-bold py-3 rounded-2xl hover:bg-[#E4E4E4] transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={!selectedWinner || isSubmitting}
-              className="flex-1 bg-gradient-to-r from-[#D500F9] to-[#7C4DFF] text-white font-bold py-3 rounded-2xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="w-5 h-5" />
-                  Submit Prediction
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={handleSubmit}
+            disabled={isProcessing || disabled}
+            className="w-full bg-gradient-to-r from-[#D500F9] to-[#7C4DFF] text-white font-bold py-4 rounded-2xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                {isApproving || isApproveConfirming ? 'Approving...' : 'Placing Bet...'}
+              </>
+            ) : (
+              <>
+                <Target className="w-5 h-5" />
+                Place Bet on {selectedWinner}
+              </>
+            )}
+          </button>
         </div>
       )}
     </div>
