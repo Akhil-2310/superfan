@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useReadContract } from 'wagmi';
 import { useRouter } from 'next/navigation';
+import { formatEther } from 'viem';
 import {
   Home,
   Zap,
@@ -23,6 +24,19 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
+
+// Contract addresses and ABIs
+const FANFI_TOKEN_ADDRESS = "0xCee0c15B42EEb44491F588104bbC46812115dBB0" as `0x${string}`
+
+const ERC20_ABI = [
+  {
+    "inputs": [{ "internalType": "address", "name": "account", "type": "address" }],
+    "name": "balanceOf",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+] as const;
 
 interface Quest {
   id: string;
@@ -81,8 +95,18 @@ export default function EngagePage() {
   const [claiming, setClaiming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'all' | 'daily' | 'weekly' | 'special'>('all');
-  const [totalTokens, setTotalTokens] = useState(0);
   const [unclaimedRewards, setUnclaimedRewards] = useState(0);
+
+  // ===== READ REAL FANFI BALANCE FROM BLOCKCHAIN =====
+  const { data: fanfiBalance, refetch: refetchBalance } = useReadContract({
+    address: FANFI_TOKEN_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+  });
+
+  // Parse balance to readable format
+  const totalTokens = fanfiBalance ? parseFloat(formatEther(fanfiBalance)) : 0;
 
   useEffect(() => {
     if (!isConnected || !address) {
@@ -143,15 +167,8 @@ export default function EngagePage() {
     if (!address) return;
     
     try {
-      const { data } = await supabase
-        .from('users')
-        .select('total_tokens')
-        .eq('wallet_address', address)
-        .single();
-      
-      if (data) {
-        setTotalTokens((data as any).total_tokens || 0);
-      }
+      // Refresh blockchain balance
+      refetchBalance();
     } catch (err) {
       console.error('Error loading user stats:', err);
     }
@@ -178,14 +195,18 @@ export default function EngagePage() {
         setQuests(prev => prev.map(q => 
           q.id === questId ? { ...q, rewardClaimed: true } : q
         ));
-        setTotalTokens(prev => prev + data.reward);
         
-        // Show success message
-        alert(`🎉 Claimed ${data.reward} FANFI tokens!`);
+        // Show success message with tx hash
+        const message = data.onChain && data.txHash
+          ? `🎉 Claimed ${data.reward} FANFI tokens on-chain!\nTx: ${data.txHash.slice(0, 10)}...`
+          : `🎉 Claimed ${data.reward} FANFI tokens!`;
+        alert(message);
         
-        // Reload rewards
+        // Reload rewards and refresh blockchain balance
         loadRewards();
-        loadUserStats();
+        setTimeout(() => {
+          refetchBalance(); // Refresh real balance after claim
+        }, 2000);
       }
     } catch (err) {
       console.error('Error claiming reward:', err);
@@ -221,18 +242,13 @@ export default function EngagePage() {
   return (
     <div className="min-h-screen bg-white flex flex-col">
       {/* Header */}
-      <header className="bg-gradient-to-r from-[#CE1141] to-[#B01038] text-white px-4 py-6 sticky top-0 z-10 shadow-lg">
+      <header className="bg-gradient-to-r from-[#CE1141] to-[#B01038] text-white px-4 py-6 shadow-lg">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold">Engage & Earn</h1>
               <p className="text-white/90 text-sm">Complete quests to earn FANFI tokens</p>
             </div>
-            <Link href="/dashboard">
-              <button className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
-                <Home className="w-6 h-6" />
-              </button>
-            </Link>
           </div>
 
           {/* Stats Bar */}
@@ -240,9 +256,9 @@ export default function EngagePage() {
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Trophy className="w-4 h-4" />
-                <span className="text-xs opacity-90">Balance</span>
+                <span className="text-xs opacity-90">Balance (On-Chain)</span>
               </div>
-              <p className="text-lg font-bold">{totalTokens} FANFI</p>
+              <p className="text-lg font-bold">{totalTokens.toFixed(2)} FANFI</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
               <div className="flex items-center gap-2 mb-1">
